@@ -1,4 +1,5 @@
 #include "CircuitEngine.h"
+#include "Components/AudioInput.h"
 
 CircuitEngine::CircuitEngine() {}
 
@@ -18,23 +19,32 @@ void CircuitEngine::setSampleRate(double rate) {
 }
 
 void CircuitEngine::processSample(float inputSample, float &outputSample) {
-  // Note: recursive lock is okay if called from processBlock
   const juce::ScopedLock sl(renderLock);
 
-  if (!circuit || circuit->getComponentCount() == 0) {
-    outputSample = inputSample; // Bypass if no circuit
+  if (!circuit || !simulationActive) {
+    outputSample = 0.0f; // No output if simulation is off
     return;
+  }
+
+  // Update internal signal generators
+  for (const auto &comp :
+       circuit->getComponentsByType(ComponentType::AudioInput)) {
+    auto *audioIn = static_cast<AudioInput *>(comp);
+    if (audioIn->getSource() == SignalSource::DAV) {
+      audioIn->setVoltage(static_cast<double>(inputSample));
+    } else {
+      audioIn->updateInternalVoltage(sampleRate * oversamplingFactor);
+    }
   }
 
   double output = 0.0;
 
   // Oversample for stability
   for (int i = 0; i < oversamplingFactor; ++i) {
-    // Scale input to typical voltage levels (±1V -> ±1V, but can be configured)
-    double inputVoltage = static_cast<double>(inputSample);
-
-    solver.step(inputVoltage);
-    output = solver.getOutputVoltage();
+    // Note: AudioInput voltage is already scaled/set above
+    solver.step(0.0); // We pass 0.0 because AudioInput components handle their
+                      // own values
+    output += solver.getOutputVoltage();
   }
 
   // Average the oversampled result (simple decimation)

@@ -1,4 +1,5 @@
 #include "PluginEditor.h"
+#include "Engine/Components/Component.h"
 #include "PluginProcessor.h"
 
 CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
@@ -27,8 +28,22 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
   // Circuit change callback to update control panel
   circuitDesigner->onCircuitChanged = [this]() {
     updateControlPanel();
-    audioProcessor.getCircuitEngine().setCircuit(
-        audioProcessor.getCircuitGraph());
+
+    auto &engine = audioProcessor.getCircuitEngine();
+    auto &graph = audioProcessor.getCircuitGraph();
+    engine.setCircuit(graph);
+
+    // Auto-probe: If no probe is active, try to find an output node
+    if (audioProcessor.getVoltageHistory(0).empty() ||
+        true) { // Always check for better node
+      for (const auto &comp : graph.getComponents()) {
+        if (comp->getType() == ComponentType::AudioOutput) {
+          audioProcessor.setProbeNode(comp->getNode1());
+          oscilloscopeView->setProbeActive(true);
+          break;
+        }
+      }
+    }
   };
 
   // Set editor size

@@ -75,7 +75,7 @@ public:
   bool isValid() const;
 
   // Get components by type
-  std::vector<CircuitComponent *> getComponentsByType(ComponentType type);
+  std::vector<CircuitComponent *> getComponentsByType(ComponentType type) const;
 
   // Thread safety
   juce::CriticalSection &getLock() const { return graphLock; }

@@ -42,6 +42,14 @@ private:
   std::vector<KnobControl> knobs;
   std::vector<SwitchControl> switches;
 
+  // Simulation controls
+  std::unique_ptr<juce::ToggleButton> powerButton;
+  std::unique_ptr<juce::ComboBox> signalSourceSelector;
+  std::unique_ptr<juce::Slider> frequencySlider;
+  std::unique_ptr<juce::Slider> amplitudeSlider;
+  std::unique_ptr<juce::Label> frequencyLabel;
+  std::unique_ptr<juce::Label> amplitudeLabel;
+
   void createKnob(int componentId, const juce::String &name, double minVal,
                   double maxVal, double defaultVal);
   void createSwitch(int componentId, const juce::String &name,

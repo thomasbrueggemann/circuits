@@ -20,9 +20,11 @@ public:
   void setComponentValue(int componentId, double value);
   double getNodeVoltage(int nodeId) const;
 
+  // Simulation control
+  void setSimulationActive(bool active) { simulationActive = active; }
+  bool isSimulationActive() const { return simulationActive; }
+
   // Oversampling factor for stability
-  void setOversamplingFactor(int factor) { oversamplingFactor = factor; }
-  int getOversamplingFactor() const { return oversamplingFactor; }
 
 private:
   MNASolver solver;
@@ -30,6 +32,7 @@ private:
 
   double sampleRate = 44100.0;
   int oversamplingFactor = 2; // 2x oversampling for stability
+  bool simulationActive = false;
 
   // DC blocking filter for output
   double dcBlockerState = 0.0;

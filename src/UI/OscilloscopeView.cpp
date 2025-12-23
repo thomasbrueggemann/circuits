@@ -193,5 +193,11 @@ void OscilloscopeView::drawNoSignalMessage(juce::Graphics &g,
                                            juce::Rectangle<float> bounds) {
   g.setColour(juce::Colour(0xFF4a6a7a).withAlpha(0.7f));
   g.setFont(12.0f);
-  g.drawText("Click a wire to probe", bounds, juce::Justification::centred);
+
+  juce::String msg = "Click a wire to probe";
+  if (!probeActive)
+    msg = "Connect AudioOutput or click wire to probe\nEnsure Simulation Power "
+          "is ON";
+
+  g.drawText(msg, bounds, juce::Justification::centred);
 }

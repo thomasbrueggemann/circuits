@@ -200,9 +200,9 @@ bool CircuitGraph::isValid() const {
 }
 
 std::vector<CircuitComponent *>
-CircuitGraph::getComponentsByType(ComponentType type) {
+CircuitGraph::getComponentsByType(ComponentType type) const {
   std::vector<CircuitComponent *> result;
-  for (auto &comp : components) {
+  for (const auto &comp : components) {
     if (comp->getType() == type)
       result.push_back(comp.get());
   }
