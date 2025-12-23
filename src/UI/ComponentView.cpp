@@ -21,9 +21,14 @@ void ComponentView::draw(juce::Graphics &g,
 
   auto bounds = juce::Rectangle<float>(-WIDTH / 2, -HEIGHT / 2, WIDTH, HEIGHT);
 
-  // Apply transform
+  // Apply transform (position and scale)
   g.saveState();
   g.addTransform(transform);
+
+  // Apply rotation
+  float rotationRad =
+      juce::degreesToRadians(static_cast<float>(component->getRotation()));
+  g.addTransform(juce::AffineTransform::rotation(rotationRad));
 
   // Selection highlight
   if (selected) {
@@ -65,6 +70,12 @@ void ComponentView::draw(juce::Graphics &g,
     break;
   }
 
+  g.restoreState();
+
+  // Draw labels outside the rotation transform
+  g.saveState();
+  g.addTransform(transform);
+
   // Draw label
   g.setColour(juce::Colour(0xFFaabbcc));
   g.setFont(10.0f / zoom);
@@ -84,7 +95,6 @@ void ComponentView::drawResistor(juce::Graphics &g,
                                  juce::Rectangle<float> bounds) {
   g.setColour(juce::Colour(0xFF00ccff));
 
-  float cx = bounds.getCentreX();
   float cy = bounds.getCentreY();
   float w = bounds.getWidth() * 0.8f;
 
@@ -163,7 +173,6 @@ void ComponentView::drawSwitch(juce::Graphics &g,
 
   g.setColour(closed ? juce::Colour(0xFF00ff00) : juce::Colour(0xFFff4444));
 
-  float cx = bounds.getCentreX();
   float cy = bounds.getCentreY();
 
   // Leads
@@ -272,6 +281,15 @@ void ComponentView::drawGround(juce::Graphics &g,
 }
 
 juce::Rectangle<float> ComponentView::getBoundsInCanvas() const {
+  if (!component)
+    return juce::Rectangle<float>();
+
+  int rot = component->getRotation();
+  if (rot == 90 || rot == 270) {
+    return juce::Rectangle<float>(canvasPosition.x - HEIGHT / 2,
+                                  canvasPosition.y - WIDTH / 2, HEIGHT, WIDTH);
+  }
+
   return juce::Rectangle<float>(canvasPosition.x - WIDTH / 2,
                                 canvasPosition.y - HEIGHT / 2, WIDTH, HEIGHT);
 }
@@ -283,41 +301,47 @@ ComponentView::getTerminalPositions() const {
   if (!component)
     return terminals;
 
+  auto getRotatedPoint = [this](juce::Point<float> localPos) {
+    float rotRad =
+        juce::degreesToRadians(static_cast<float>(component->getRotation()));
+    auto transform = juce::AffineTransform::rotation(rotRad);
+    return canvasPosition + localPos.transformedBy(transform);
+  };
+
   if (component->getType() == ComponentType::Ground) {
     // Single terminal at top
-    terminals.push_back({component->getNode1(),
-                         canvasPosition + juce::Point<float>(0, -HEIGHT / 2)});
+    terminals.push_back(
+        {component->getNode1(), getRotatedPoint({0, -HEIGHT / 2})});
     return terminals;
   }
 
   // Standard two-terminal components (including I/O)
-  terminals.push_back({component->getNode1(),
-                       canvasPosition + juce::Point<float>(-WIDTH / 2, 0)});
-  terminals.push_back({component->getNode2(),
-                       canvasPosition + juce::Point<float>(WIDTH / 2, 0)});
+  if (component->getType() != ComponentType::VacuumTube &&
+      component->getType() != ComponentType::Potentiometer) {
+    terminals.push_back(
+        {component->getNode1(), getRotatedPoint({-WIDTH / 2, 0})});
+    terminals.push_back(
+        {component->getNode2(), getRotatedPoint({WIDTH / 2, 0})});
+  }
 
   // Three-terminal components
   if (component->getType() == ComponentType::Potentiometer) {
     auto *pot = dynamic_cast<Potentiometer *>(component);
     if (pot) {
-      terminals.push_back(
-          {pot->getNode3(),
-           canvasPosition + juce::Point<float>(0, -HEIGHT / 2)});
+      terminals.push_back({pot->getNode1(), getRotatedPoint({-WIDTH / 2, 0})});
+      terminals.push_back({pot->getNode2(), getRotatedPoint({WIDTH / 2, 0})});
+      terminals.push_back({pot->getNode3(), getRotatedPoint({0, -HEIGHT / 2})});
     }
   } else if (component->getType() == ComponentType::VacuumTube) {
     auto *tube = dynamic_cast<VacuumTube *>(component);
     if (tube) {
       // Grid at left, cathode at bottom, plate at top
-      terminals.clear();
       terminals.push_back(
-          {tube->getNode1(),
-           canvasPosition + juce::Point<float>(-WIDTH / 2 - 5, 0)}); // Grid
+          {tube->getNode1(), getRotatedPoint({-WIDTH / 2 - 5, 0})}); // Grid
       terminals.push_back(
-          {tube->getNode2(),
-           canvasPosition + juce::Point<float>(0, HEIGHT / 2 + 5)}); // Cathode
-      terminals.push_back(
-          {tube->getPlateNode(),
-           canvasPosition + juce::Point<float>(0, -HEIGHT / 2 - 5)}); // Plate
+          {tube->getNode2(), getRotatedPoint({0, HEIGHT / 2 + 5})}); // Cathode
+      terminals.push_back({tube->getPlateNode(),
+                           getRotatedPoint({0, -HEIGHT / 2 - 5})}); // Plate
     }
   }
 

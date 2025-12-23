@@ -104,6 +104,7 @@ private:
   // Component management
   void addComponent(ComponentType type, juce::Point<float> position);
   void removeSelectedComponent();
+  void rotateSelectedComponent();
   void removeSelectedWire();
   ComponentView *findComponentAt(juce::Point<float> canvasPos);
   int findNodeAt(juce::Point<float> canvasPos);

@@ -166,18 +166,66 @@ void CircuitDesigner::mouseDown(const juce::MouseEvent &e) {
     // Context menu or cancel wire
     if (isDrawingWire) {
       cancelWire();
+    } else {
+      // Show context menu
+      juce::PopupMenu m;
+      auto *clickedComp = findComponentAt(canvasPos);
+
+      if (clickedComp) {
+        // Deselect previous and select this one
+        if (selectedComponent && selectedComponent != clickedComp)
+          selectedComponent->setSelected(false);
+
+        selectedComponent = clickedComp;
+        selectedComponent->setSelected(true);
+        selectedWire = nullptr;
+        repaint();
+
+        m.addItem(1, "Rotate (R)");
+        m.addItem(2, "Edit Value...");
+        m.addSeparator();
+        m.addItem(3, "Delete");
+
+        m.showMenuAsync(juce::PopupMenu::Options(), [this](int result) {
+          if (result == 1)
+            rotateSelectedComponent();
+          else if (result == 2 && selectedComponent)
+            selectedComponent->showValueEditor();
+          else if (result == 3)
+            removeSelectedComponent();
+        });
+      } else {
+        auto *clickedWire = findWireAt(canvasPos);
+        if (clickedWire) {
+          selectedWire = clickedWire;
+          selectedComponent = nullptr;
+          repaint();
+
+          m.addItem(1, "Delete Wire");
+          m.showMenuAsync(juce::PopupMenu::Options(), [this](int result) {
+            if (result == 1)
+              removeSelectedWire();
+          });
+        }
+      }
     }
     return;
   }
 
-  // Check if clicking on a connection point
+  // Prioritize finishing an active wire if we click a node
   int clickedNode = findNodeAt(canvasPos);
-  if (clickedNode >= 0) {
-    if (isDrawingWire) {
-      finishWire(clickedNode);
-    } else {
-      startWire(clickedNode, canvasPos);
-    }
+  if (isDrawingWire && clickedNode >= 0) {
+    finishWire(clickedNode);
+    return;
+  }
+
+  // Check if clicking on a component body first (for selection/dragging)
+  ComponentView *clickedComponent = findComponentAt(canvasPos);
+
+  // Start a wire if we clicked a node and are NOT over a component body,
+  // or if we are clicking very precisely on a node
+  if (clickedNode >= 0 && (!clickedComponent || e.mods.isShiftDown())) {
+    startWire(clickedNode, canvasPos);
     grabKeyboardFocus();
     return;
   }
@@ -201,7 +249,7 @@ void CircuitDesigner::mouseDown(const juce::MouseEvent &e) {
   }
 
   // Check if clicking on a component
-  ComponentView *clickedComponent = findComponentAt(canvasPos);
+  clickedComponent = findComponentAt(canvasPos);
   if (clickedComponent) {
     // Deselect previous
     if (selectedComponent)
@@ -286,6 +334,8 @@ void CircuitDesigner::mouseUp(const juce::MouseEvent &e) {
 
     if (endNode >= 0 && endNode != wireStartNode) {
       finishWire(endNode);
+    } else {
+      cancelWire();
     }
   }
 }
@@ -451,51 +501,64 @@ void CircuitDesigner::zoomToFit() {
 
 void CircuitDesigner::addComponent(ComponentType type,
                                    juce::Point<float> position) {
-  // Create nodes for the component
-  int node1 = circuitGraph.createNode();
-  int node2 = circuitGraph.createNode();
-
   std::unique_ptr<CircuitComponent> comp;
   juce::String name;
 
   int id = circuitGraph.getComponentCount();
 
   switch (type) {
-  case ComponentType::Resistor:
+  case ComponentType::Resistor: {
+    int node1 = circuitGraph.createNode();
+    int node2 = circuitGraph.createNode();
     name = "R" + juce::String(id);
     comp = std::make_unique<Resistor>(id, name, node1, node2, 10000.0);
     break;
-  case ComponentType::Capacitor:
+  }
+  case ComponentType::Capacitor: {
+    int node1 = circuitGraph.createNode();
+    int node2 = circuitGraph.createNode();
     name = "C" + juce::String(id);
     comp = std::make_unique<Capacitor>(id, name, node1, node2, 100e-9);
     break;
+  }
   case ComponentType::Potentiometer: {
+    int node1 = circuitGraph.createNode();
+    int node2 = circuitGraph.createNode();
     int node3 = circuitGraph.createNode();
-    name = "P" + juce::String(id);
+    name = "POT" + juce::String(id);
     comp =
         std::make_unique<Potentiometer>(id, name, node1, node2, node3, 10000.0);
     break;
   }
-  case ComponentType::Switch:
+  case ComponentType::Switch: {
+    int node1 = circuitGraph.createNode();
+    int node2 = circuitGraph.createNode();
     name = "SW" + juce::String(id);
     comp = std::make_unique<Switch>(id, name, node1, node2);
     break;
+  }
   case ComponentType::VacuumTube: {
+    int node1 = circuitGraph.createNode();
+    int node2 = circuitGraph.createNode();
     int node3 = circuitGraph.createNode(); // Plate node
     name = "V" + juce::String(id);
     comp = std::make_unique<VacuumTube>(id, name, node1, node2, node3);
     break;
   }
-  case ComponentType::AudioInput:
+  case ComponentType::AudioInput: {
+    int node1 = circuitGraph.createNode();
     name = "IN";
     comp = std::make_unique<AudioInput>(id, name, node1,
                                         circuitGraph.getGroundNodeId());
     break;
-  case ComponentType::AudioOutput:
+  }
+  case ComponentType::AudioOutput: {
+    int node1 = circuitGraph.createNode();
     name = "OUT";
     comp = std::make_unique<AudioOutput>(id, name, node1,
                                          circuitGraph.getGroundNodeId());
     break;
+  }
   case ComponentType::Ground:
     name = "GND";
     comp = std::make_unique<Ground>(id, name, circuitGraph.getGroundNodeId());
@@ -527,6 +590,27 @@ void CircuitDesigner::removeSelectedComponent() {
   }
 }
 
+void CircuitDesigner::rotateSelectedComponent() {
+  if (selectedComponent) {
+    if (auto *comp = selectedComponent->getComponent()) {
+      int newRot = (comp->getRotation() + 90) % 360;
+      comp->setRotation(newRot);
+
+      // Re-read position for the view (though it shouldn't have changed,
+      // it might help trigger updates if we used a more complex system)
+      selectedComponent->setCanvasPosition(comp->getPosition());
+
+      // Update connected wires
+      updateWirePositionsForComponent(selectedComponent);
+
+      if (onCircuitChanged)
+        onCircuitChanged();
+
+      repaint();
+    }
+  }
+}
+
 void CircuitDesigner::removeSelectedWire() {
   if (selectedWire) {
     circuitGraph.removeWire(selectedWire->getId());
@@ -547,6 +631,11 @@ bool CircuitDesigner::keyPressed(const juce::KeyPress &key) {
       removeSelectedWire();
       return true;
     }
+  } else if (key.getTextCharacter() == 'r' || key.getTextCharacter() == 'R') {
+    if (selectedComponent) {
+      rotateSelectedComponent();
+      return true;
+    }
   }
   return false;
 }
@@ -562,7 +651,7 @@ ComponentView *CircuitDesigner::findComponentAt(juce::Point<float> canvasPos) {
 
 int CircuitDesigner::findNodeAt(juce::Point<float> canvasPos) {
   auto screenMousePos = canvasToScreen(canvasPos);
-  float snapDist = 15.0f; // Screen pixels
+  float snapDist = 12.0f; // Screen pixels (slightly tighter)
 
   int closestNode = -1;
   float minDistance = snapDist;
@@ -586,6 +675,7 @@ void CircuitDesigner::startWire(int startNode, juce::Point<float> startPos) {
   isDrawingWire = true;
   wireStartNode = startNode;
   wireEndPoint = startPos;
+  repaint();
 }
 
 void CircuitDesigner::finishWire(int endNode) {
