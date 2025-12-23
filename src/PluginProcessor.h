@@ -55,7 +55,7 @@ private:
   int probeNodeId = -1;
   juce::CriticalSection historyLock;
   std::vector<float> voltageHistory;
-  static constexpr size_t HISTORY_SIZE = 1024;
+  static constexpr size_t HISTORY_SIZE = 8192;
   size_t historyIndex = 0;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CircuitsAudioProcessor)

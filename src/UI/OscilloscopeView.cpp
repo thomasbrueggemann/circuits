@@ -30,9 +30,10 @@ void OscilloscopeView::resized() {}
 void OscilloscopeView::timerCallback() { repaint(); }
 
 void OscilloscopeView::updateWaveform(const std::vector<float> &samples) {
-  // Just copy the unwrapped samples
-  size_t count = std::min(samples.size(), waveformBuffer.size());
-  std::copy(samples.begin(), samples.begin() + count, waveformBuffer.begin());
+  if (waveformBuffer.size() != samples.size())
+    waveformBuffer.resize(samples.size());
+
+  std::copy(samples.begin(), samples.end(), waveformBuffer.begin());
 
   // Diagnostics
   lastSampleBatch = samples;
@@ -134,13 +135,13 @@ void OscilloscopeView::drawWaveform(juce::Graphics &g,
   // Create waveform path
   juce::Path waveformPath;
 
-  int samplesPerPixel = static_cast<int>(BUFFER_SIZE / gridBounds.getWidth());
-  samplesPerPixel = std::max(1, samplesPerPixel);
+  int samplesToDisplay = static_cast<int>(BUFFER_SIZE);
+  // Optional: Adjust samplesToDisplay based on timeScale here if needed
 
   bool pathStarted = false;
 
   for (int x = 0; x < static_cast<int>(gridBounds.getWidth()); ++x) {
-    // Get sample at this position (samples are now chronological in the buffer)
+    // Get sample at this position
     float progress = static_cast<float>(x) / gridBounds.getWidth();
     size_t sampleIndex =
         static_cast<size_t>(progress * (waveformBuffer.size() - 1));

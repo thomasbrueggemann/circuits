@@ -38,7 +38,7 @@ private:
   // Waveform data
   std::vector<float> waveformBuffer;
   size_t writeIndex = 0;
-  static constexpr size_t BUFFER_SIZE = 2048;
+  static constexpr size_t BUFFER_SIZE = 8192;
 
   // Display state
   bool probeActive = false;
