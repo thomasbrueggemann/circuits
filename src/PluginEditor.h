@@ -5,6 +5,7 @@
 #include "UI/ComponentPalette.h"
 #include "UI/ControlPanel.h"
 #include "UI/OscilloscopeView.h"
+#include "UI/TopBar.h"
 #include <JuceHeader.h>
 
 class CircuitsAudioProcessorEditor : public juce::AudioProcessorEditor,
@@ -26,8 +27,10 @@ private:
   std::unique_ptr<CircuitDesigner> circuitDesigner;
   std::unique_ptr<ControlPanel> controlPanel;
   std::unique_ptr<OscilloscopeView> oscilloscopeView;
+  std::unique_ptr<TopBar> topBar;
 
   // Layout
+  static constexpr int TOP_BAR_HEIGHT = 60;
   static constexpr int PALETTE_WIDTH = 80;
   static constexpr int CONTROL_PANEL_WIDTH = 200;
   static constexpr int OSCILLOSCOPE_HEIGHT = 150;

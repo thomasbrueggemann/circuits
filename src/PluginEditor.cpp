@@ -12,12 +12,15 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
   controlPanel = std::make_unique<ControlPanel>(
       audioProcessor.getCircuitGraph(), audioProcessor.getCircuitEngine());
   oscilloscopeView = std::make_unique<OscilloscopeView>();
+  topBar = std::make_unique<TopBar>(audioProcessor.getCircuitGraph(),
+                                    audioProcessor.getCircuitEngine());
 
   // Add components
   addAndMakeVisible(*componentPalette);
   addAndMakeVisible(*circuitDesigner);
   addAndMakeVisible(*controlPanel);
   addAndMakeVisible(*oscilloscopeView);
+  addAndMakeVisible(*topBar);
 
   // Wire selection callback for oscilloscope
   circuitDesigner->onWireSelected = [this](int nodeId) {
@@ -51,6 +54,9 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
   setResizable(true, true);
   setResizeLimits(800, 600, 2400, 1600);
 
+  // Debug: Set a distinct window name
+  setName("CIRCUITS - TOOLBAR DEBUG (MAGENTA)");
+
   // Start timer for UI updates
   startTimerHz(30);
 }
@@ -73,10 +79,17 @@ void CircuitsAudioProcessorEditor::paint(juce::Graphics &g) {
   g.drawHorizontalLine(getHeight() - OSCILLOSCOPE_HEIGHT,
                        static_cast<float>(PALETTE_WIDTH),
                        static_cast<float>(getWidth() - CONTROL_PANEL_WIDTH));
+
+  // Debug: Draw TopBar area boundary
+  g.setColour(juce::Colours::yellow);
+  g.drawRect(0, 0, getWidth(), TOP_BAR_HEIGHT, 2);
 }
 
 void CircuitsAudioProcessorEditor::resized() {
   auto bounds = getLocalBounds();
+
+  // Top Bar
+  topBar->setBounds(bounds.removeFromTop(TOP_BAR_HEIGHT));
 
   // Left palette
   componentPalette->setBounds(bounds.removeFromLeft(PALETTE_WIDTH));

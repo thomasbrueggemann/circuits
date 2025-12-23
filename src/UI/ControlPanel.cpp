@@ -157,26 +157,6 @@ void ControlPanel::resized() {
   int switchHeight = 50;
   int padding = 10;
 
-  // Power button
-  if (powerButton) {
-    powerButton->setBounds(bounds.removeFromTop(40).reduced(padding));
-  }
-
-  // Signal Generator controls if an input node exists
-  if (signalSourceSelector && signalSourceSelector->isVisible()) {
-    auto sigBounds = bounds.removeFromTop(150).reduced(padding);
-    signalSourceSelector->setBounds(sigBounds.removeFromTop(24));
-    sigBounds.removeFromTop(5);
-
-    auto freqBounds = sigBounds.removeFromTop(50);
-    frequencyLabel->setBounds(freqBounds.removeFromLeft(40));
-    frequencySlider->setBounds(freqBounds);
-
-    auto ampBounds = sigBounds.removeFromTop(50);
-    amplitudeLabel->setBounds(ampBounds.removeFromLeft(40));
-    amplitudeSlider->setBounds(ampBounds);
-  }
-
   // Layout knobs
   for (auto &knob : knobs) {
     auto knobBounds = bounds.removeFromTop(knobSize + 20);
@@ -193,63 +173,6 @@ void ControlPanel::resized() {
 void ControlPanel::rebuildControls() {
   knobs.clear();
   switches.clear();
-
-  // 1. Create Power Toggle
-  powerButton = std::make_unique<juce::ToggleButton>("SIMULATION POWER");
-  powerButton->setToggleState(circuitEngine.isSimulationActive(),
-                              juce::dontSendNotification);
-  powerButton->onClick = [this]() {
-    circuitEngine.setSimulationActive(powerButton->getToggleState());
-  };
-  powerButton->setLookAndFeel(&vintageLook);
-  addAndMakeVisible(*powerButton);
-
-  // 2. Find AudioInput and create Signal Generator controls
-  for (const auto &comp : circuitGraph.getComponents()) {
-    if (comp->getType() == ComponentType::AudioInput) {
-      auto *input = static_cast<AudioInput *>(comp.get());
-
-      signalSourceSelector = std::make_unique<juce::ComboBox>();
-      signalSourceSelector->addItem("DAW Input", 1);
-      signalSourceSelector->addItem("Sine Wave", 2);
-      signalSourceSelector->addItem("Square Wave", 3);
-      signalSourceSelector->addItem("White Noise", 4);
-      signalSourceSelector->setSelectedId(static_cast<int>(input->getSource()) +
-                                          1);
-      signalSourceSelector->onChange = [this, input]() {
-        input->setSource(static_cast<SignalSource>(
-            signalSourceSelector->getSelectedId() - 1));
-      };
-      addAndMakeVisible(*signalSourceSelector);
-
-      frequencySlider = std::make_unique<juce::Slider>(
-          juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
-      frequencySlider->setRange(20.0, 2000.0, 1.0);
-      frequencySlider->setSkewFactorFromMidPoint(440.0);
-      frequencySlider->setValue(input->getFrequency());
-      frequencySlider->onValueChange = [input, this]() {
-        input->setFrequency(frequencySlider->getValue());
-      };
-      addAndMakeVisible(*frequencySlider);
-
-      frequencyLabel = std::make_unique<juce::Label>("", "Freq");
-      addAndMakeVisible(*frequencyLabel);
-
-      amplitudeSlider = std::make_unique<juce::Slider>(
-          juce::Slider::LinearHorizontal, juce::Slider::NoTextBox);
-      amplitudeSlider->setRange(0.0, 10.0, 0.01);
-      amplitudeSlider->setValue(input->getAmplitude());
-      amplitudeSlider->onValueChange = [input, this]() {
-        input->setAmplitude(amplitudeSlider->getValue());
-      };
-      addAndMakeVisible(*amplitudeSlider);
-
-      amplitudeLabel = std::make_unique<juce::Label>("", "Amp");
-      addAndMakeVisible(*amplitudeLabel);
-
-      break;
-    }
-  }
 
   // 3. Find all potentiometers and switches
   for (const auto &comp : circuitGraph.getComponents()) {

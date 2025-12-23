@@ -4,6 +4,15 @@ project(Circuits VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_OBJCXX_STANDARD 17)
+set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+
+if(APPLE)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X version")
+    set(CMAKE_OSX_SYSROOT "macosx" CACHE STRING "macOS SDK")
+    add_compile_options("-stdlib=libc++")
+    add_link_options("-stdlib=libc++")
+endif()
 
 # Add JUCE
 add_subdirectory(JUCE)
@@ -53,6 +62,7 @@ PRIVATE
     src/UI/ComponentPalette.cpp
     src/UI/ComponentView.cpp
     src/UI/WireView.cpp
+    src/UI/TopBar.cpp
     src/UI/ControlPanel.cpp
     src/UI/OscilloscopeView.cpp
 )
