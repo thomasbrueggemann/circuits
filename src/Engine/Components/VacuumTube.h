@@ -81,6 +81,10 @@ public:
   int getPlateNode() const { return plateNodeId; }
   void setPlateNode(int node) { plateNodeId = node; }
 
+  std::vector<int> getAllNodes() const override {
+    return {terminalNode1, terminalNode2, plateNodeId};
+  }
+
   // Koren parameters
   double getMu() const { return mu; }
   void setMu(double m) {

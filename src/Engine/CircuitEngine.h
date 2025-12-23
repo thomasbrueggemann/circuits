@@ -34,4 +34,6 @@ private:
   // DC blocking filter for output
   double dcBlockerState = 0.0;
   static constexpr double DC_BLOCKER_COEFF = 0.995;
+
+  juce::CriticalSection renderLock;
 };

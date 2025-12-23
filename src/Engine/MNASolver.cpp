@@ -32,6 +32,8 @@ void MNASolver::buildMatrix() {
   if (!circuitGraph)
     return;
 
+  const juce::ScopedLock sl(circuitGraph->getLock());
+
   // Map nodes to matrix indices (ground is not included in matrix)
   nodeToIndex.clear();
   int index = 0;
@@ -67,9 +69,16 @@ void MNASolver::buildMatrix() {
   LU.assign(matrixSize, std::vector<double>(matrixSize, 0.0));
   pivot.assign(matrixSize, 0);
 
-  // Initialize capacitor state
-  capVoltages.clear();
-  capCurrents.clear();
+  // Initialize capacitor state if necessary
+  if (capVoltages.size() !=
+      static_cast<size_t>(
+          numVSources)) { // This is wrong, should be based on capacitors
+    // We'll reset state if the number of capacitors changed
+  }
+
+  // Clear cached lists
+  cachedCapacitors.clear();
+  cachedNonLinear.clear();
 
   clearMatrix();
 
@@ -88,11 +97,13 @@ void MNASolver::buildMatrix() {
     }
     case ComponentType::Capacitor: {
       auto *c = static_cast<Capacitor *>(comp.get());
-      // Trapezoidal: G_eq = 2C/dt
       double geq = 2.0 * c->getCapacitance() / dt;
       stampResistor(n1, n2, 1.0 / geq);
-      capVoltages.push_back(0.0);
-      capCurrents.push_back(0.0);
+
+      // Cache for audio thread
+      cachedCapacitors.push_back({n1, n2, c->getCapacitance(),
+                                  static_cast<int>(cachedCapacitors.size()),
+                                  c});
       break;
     }
     case ComponentType::Potentiometer: {
@@ -104,7 +115,6 @@ void MNASolver::buildMatrix() {
 
       int n3 = nodeToIndex[p->getNode3()];
 
-      // Minimum resistance to avoid division by zero
       r1 = std::max(r1, 0.01);
       r2 = std::max(r2, 0.01);
 
@@ -119,26 +129,32 @@ void MNASolver::buildMatrix() {
       break;
     }
     case ComponentType::AudioInput: {
-      // Voltage source: stamps into B, C matrices
       stampVoltageSource(n1, n2, vsourceIndex, 0.0);
       inputNodeIndex = vsourceIndex;
       vsourceIndex++;
       break;
     }
     case ComponentType::AudioOutput: {
-      auto *out = static_cast<AudioOutput *>(comp.get());
       outputNodeIndex = n1 >= 0 ? n1 : n2;
-      // High impedance probe - just store the node we're measuring
-      juce::ignoreUnused(out);
       break;
     }
     case ComponentType::VacuumTube: {
-      // Nonlinear - handled in Newton-Raphson iteration
+      auto *tube = static_cast<VacuumTube *>(comp.get());
+      int grid = n1;
+      int cathode = n2;
+      int plate = nodeToIndex[tube->getPlateNode()];
+      cachedNonLinear.push_back({tube, grid, cathode, plate});
       break;
     }
     default:
       break;
     }
+  }
+
+  // Update capacitor state vectors size
+  if (capVoltages.size() != cachedCapacitors.size()) {
+    capVoltages.assign(cachedCapacitors.size(), 0.0);
+    capCurrents.assign(cachedCapacitors.size(), 0.0);
   }
 }
 
@@ -212,8 +228,10 @@ void MNASolver::stampVCCS(int n1, int n2, int nc1, int nc2, double gm) {
 }
 
 bool MNASolver::solve() {
-  if (matrixSize == 0)
+  if (matrixSize == 0 || !circuitGraph)
     return false;
+
+  const juce::ScopedLock sl(circuitGraph->getLock());
 
   // Check for nonlinear components
   bool hasNonlinear = false;
@@ -240,7 +258,6 @@ bool MNASolver::solveNonlinear(int maxIterations, double tolerance) {
   for (int iter = 0; iter < maxIterations; ++iter) {
     // Rebuild matrix with current operating point
     clearMatrix();
-    buildMatrix();
     updateNonlinearStamps();
 
     if (!luDecompose())
@@ -265,43 +282,41 @@ bool MNASolver::solveNonlinear(int maxIterations, double tolerance) {
 
 void MNASolver::updateNonlinearStamps() {
   // Update vacuum tube stamps based on current operating point
-  for (const auto &comp : circuitGraph->getComponents()) {
-    if (comp->getType() == ComponentType::VacuumTube) {
-      auto *tube = static_cast<VacuumTube *>(comp.get());
+  for (const auto &cached : cachedNonLinear) {
+    auto *tube = cached.tube;
 
-      int gridNode = nodeToIndex[tube->getNode1()];      // Grid
-      int cathodeNode = nodeToIndex[tube->getNode2()];   // Cathode
-      int plateNode = nodeToIndex[tube->getPlateNode()]; // Plate
+    int gridNode = cached.gridNode;
+    int cathodeNode = cached.cathodeNode;
+    int plateNode = cached.plateNode;
 
-      // Get current voltages
-      double vg = gridNode >= 0 ? x[gridNode] : 0.0;
-      double vk = cathodeNode >= 0 ? x[cathodeNode] : 0.0;
-      double vp = plateNode >= 0 ? x[plateNode] : 0.0;
+    // Get current voltages
+    double vg = gridNode >= 0 ? x[gridNode] : 0.0;
+    double vk = cathodeNode >= 0 ? x[cathodeNode] : 0.0;
+    double vp = plateNode >= 0 ? x[plateNode] : 0.0;
 
-      double vgk = vg - vk;
-      double vpk = vp - vk;
+    double vgk = vg - vk;
+    double vpk = vp - vk;
 
-      // Calculate plate current and transconductance
-      double ip, gm, gp;
-      tube->calculateDerivatives(vgk, vpk, ip, gm, gp);
+    // Calculate plate current and transconductance
+    double ip, gm, gp;
+    tube->calculateDerivatives(vgk, vpk, ip, gm, gp);
 
-      // Stamp linearized model (Norton equivalent)
-      // Plate current source
-      double ieq = ip - gm * vgk - gp * vpk;
-      stampCurrentSource(plateNode, cathodeNode, ieq);
+    // Stamp linearized model (Norton equivalent)
+    // Plate current source
+    double ieq = ip - gm * vgk - gp * vpk;
+    stampCurrentSource(plateNode, cathodeNode, ieq);
 
-      // Transconductance (VCCS from grid to plate)
-      stampVCCS(plateNode, cathodeNode, gridNode, cathodeNode, gm);
+    // Transconductance (VCCS from grid to plate)
+    stampVCCS(plateNode, cathodeNode, gridNode, cathodeNode, gm);
 
-      // Plate conductance
-      if (plateNode >= 0)
-        G[plateNode][plateNode] += gp;
-      if (cathodeNode >= 0)
-        G[cathodeNode][cathodeNode] += gp;
-      if (plateNode >= 0 && cathodeNode >= 0) {
-        G[plateNode][cathodeNode] -= gp;
-        G[cathodeNode][plateNode] -= gp;
-      }
+    // Plate conductance
+    if (plateNode >= 0)
+      G[plateNode][plateNode] += gp;
+    if (cathodeNode >= 0)
+      G[cathodeNode][cathodeNode] += gp;
+    if (plateNode >= 0 && cathodeNode >= 0) {
+      G[plateNode][cathodeNode] -= gp;
+      G[cathodeNode][plateNode] -= gp;
     }
   }
 }
@@ -373,30 +388,27 @@ void MNASolver::step(double inputVoltage) {
   if (matrixSize == 0 || !circuitGraph)
     return;
 
+  const juce::ScopedLock sl(circuitGraph->getLock());
+
   // Update capacitor companion models
-  int capIndex = 0;
-  for (const auto &comp : circuitGraph->getComponents()) {
-    if (comp->getType() == ComponentType::Capacitor) {
-      auto *c = static_cast<Capacitor *>(comp.get());
-      int n1 = nodeToIndex[comp->getNode1()];
-      int n2 = nodeToIndex[comp->getNode2()];
+  for (const auto &cap : cachedCapacitors) {
+    int n1 = cap.node1;
+    int n2 = cap.node2;
 
-      double v1 = n1 >= 0 ? x[n1] : 0.0;
-      double v2 = n2 >= 0 ? x[n2] : 0.0;
-      double vCap = v1 - v2;
+    double v1 = n1 >= 0 ? x[n1] : 0.0;
+    double v2 = n2 >= 0 ? x[n2] : 0.0;
+    double vCap = v1 - v2;
 
-      double geq = 2.0 * c->getCapacitance() / dt;
-      double ieq = geq * capVoltages[capIndex] + capCurrents[capIndex];
+    double geq = 2.0 * cap.capacitance / dt;
+    double ieq =
+        geq * capVoltages[cap.stateIndex] + capCurrents[cap.stateIndex];
 
-      // Add equivalent current source
-      stampCurrentSource(n1, n2, ieq);
+    // Add equivalent current source
+    stampCurrentSource(n1, n2, ieq);
 
-      // Update state
-      capVoltages[capIndex] = vCap;
-      capCurrents[capIndex] = geq * vCap - ieq;
-
-      capIndex++;
-    }
+    // Update state
+    capVoltages[cap.stateIndex] = vCap;
+    capCurrents[cap.stateIndex] = geq * vCap - ieq;
   }
 
   // Set input voltage
@@ -437,6 +449,8 @@ double MNASolver::getOutputVoltage() const {
 void MNASolver::updateComponentValue(int componentId, double value) {
   if (!circuitGraph)
     return;
+
+  const juce::ScopedLock sl(circuitGraph->getLock());
 
   // Find component and update
   CircuitComponent *comp =

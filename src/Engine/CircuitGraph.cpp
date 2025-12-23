@@ -9,6 +9,7 @@ CircuitGraph::CircuitGraph() {
 CircuitGraph::~CircuitGraph() = default;
 
 int CircuitGraph::createNode(const juce::String &name) {
+  const juce::ScopedLock sl(graphLock);
   int id = nextNodeId++;
   juce::String nodeName = name.isEmpty() ? "Node" + juce::String(id) : name;
   nodes.emplace_back(id, nodeName, false);
@@ -16,6 +17,7 @@ int CircuitGraph::createNode(const juce::String &name) {
 }
 
 int CircuitGraph::createGroundNode() {
+  const juce::ScopedLock sl(graphLock);
   if (groundNodeId >= 0)
     return groundNodeId;
 
@@ -26,6 +28,7 @@ int CircuitGraph::createGroundNode() {
 }
 
 void CircuitGraph::addNode(int id, const juce::String &name, bool isGround) {
+  const juce::ScopedLock sl(graphLock);
   // Check if node already exists
   for (auto &node : nodes) {
     if (node.id == id) {
@@ -62,6 +65,7 @@ const Node *CircuitGraph::getNode(int id) const {
 }
 
 void CircuitGraph::addComponent(std::unique_ptr<CircuitComponent> component) {
+  const juce::ScopedLock sl(graphLock);
   if (!component)
     return;
 
@@ -74,6 +78,43 @@ void CircuitGraph::addComponent(std::unique_ptr<CircuitComponent> component) {
 }
 
 void CircuitGraph::removeComponent(int componentId) {
+  const juce::ScopedLock sl(graphLock);
+
+  // Find component first to get its nodes
+  CircuitComponent *compToRemove = nullptr;
+  for (auto &c : components) {
+    if (c->getId() == componentId) {
+      compToRemove = c.get();
+      break;
+    }
+  }
+
+  if (!compToRemove)
+    return;
+
+  // Get all nodes used by this component
+  std::vector<int> componentNodes = compToRemove->getAllNodes();
+
+  // Find all wires connected to these nodes
+  std::vector<int> wiresToRemove;
+  for (const auto &wire : wires) {
+    for (int node : componentNodes) {
+      if (wire.nodeA == node || wire.nodeB == node) {
+        wiresToRemove.push_back(wire.id);
+        break;
+      }
+    }
+  }
+
+  // Remove the connected wires
+  for (int wireId : wiresToRemove) {
+    wires.erase(
+        std::remove_if(wires.begin(), wires.end(),
+                       [wireId](const Wire &w) { return w.id == wireId; }),
+        wires.end());
+  }
+
+  // Remove the component
   components.erase(
       std::remove_if(components.begin(), components.end(),
                      [componentId](const std::unique_ptr<CircuitComponent> &c) {
@@ -99,6 +140,7 @@ const CircuitComponent *CircuitGraph::getComponent(int componentId) const {
 }
 
 int CircuitGraph::connectNodes(int nodeA, int nodeB) {
+  const juce::ScopedLock sl(graphLock);
   // Check if wire already exists
   for (const auto &wire : wires) {
     if ((wire.nodeA == nodeA && wire.nodeB == nodeB) ||
@@ -113,6 +155,7 @@ int CircuitGraph::connectNodes(int nodeA, int nodeB) {
 }
 
 void CircuitGraph::removeWire(int wireId) {
+  const juce::ScopedLock sl(graphLock);
   wires.erase(
       std::remove_if(wires.begin(), wires.end(),
                      [wireId](const Wire &w) { return w.id == wireId; }),
@@ -128,6 +171,7 @@ Wire *CircuitGraph::getWireById(int wireId) {
 }
 
 void CircuitGraph::clear() {
+  const juce::ScopedLock sl(graphLock);
   nodes.clear();
   components.clear();
   wires.clear();

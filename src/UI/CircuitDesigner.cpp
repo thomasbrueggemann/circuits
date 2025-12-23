@@ -2,6 +2,7 @@
 #include "../Engine/Components/AudioInput.h"
 #include "../Engine/Components/AudioOutput.h"
 #include "../Engine/Components/Capacitor.h"
+#include "../Engine/Components/Ground.h"
 #include "../Engine/Components/Potentiometer.h"
 #include "../Engine/Components/Resistor.h"
 #include "../Engine/Components/Switch.h"
@@ -11,7 +12,8 @@
 #include "WireView.h"
 
 CircuitDesigner::CircuitDesigner(CircuitGraph &graph, ComponentPalette &pal)
-    : circuitGraph(graph), palette(pal) {
+    : circuitGraph(graph) {
+  juce::ignoreUnused(pal);
   setWantsKeyboardFocus(true);
   rebuildViews();
 }
@@ -122,6 +124,9 @@ void CircuitDesigner::drawDragPreview(juce::Graphics &g) {
 }
 
 void CircuitDesigner::drawConnectionPoints(juce::Graphics &g) {
+  auto mousePos = getMouseXYRelative().toFloat();
+  float snapDist = 15.0f; // Screen pixels
+
   // Draw connection points (nodes) for each component
   for (auto &view : componentViews) {
     auto terminals = view->getTerminalPositions();
@@ -129,11 +134,10 @@ void CircuitDesigner::drawConnectionPoints(juce::Graphics &g) {
     for (auto &[nodeId, pos] : terminals) {
       auto screenPos = canvasToScreen(pos);
 
-      // Check if hovered
-      auto mousePos = getMouseXYRelative().toFloat();
+      // Check if hovered (use consistent pixel distance)
       float distance = mousePos.getDistanceFrom(screenPos);
 
-      if (distance < 15.0f * zoomLevel) {
+      if (distance < snapDist) {
         g.setColour(juce::Colour(0xFF00ff88));
         g.fillEllipse(screenPos.x - 8 * zoomLevel, screenPos.y - 8 * zoomLevel,
                       16 * zoomLevel, 16 * zoomLevel);
@@ -174,7 +178,13 @@ void CircuitDesigner::mouseDown(const juce::MouseEvent &e) {
     } else {
       startWire(clickedNode, canvasPos);
     }
+    grabKeyboardFocus();
     return;
+  }
+
+  // Clicked on empty space or other element - cancel wire if drawing
+  if (isDrawingWire) {
+    cancelWire();
   }
 
   // Check if clicking on a wire
@@ -201,6 +211,7 @@ void CircuitDesigner::mouseDown(const juce::MouseEvent &e) {
     selectedComponent->setSelected(true);
     selectedWire = nullptr;
 
+    grabKeyboardFocus();
     repaint();
     return;
   }
@@ -228,7 +239,23 @@ void CircuitDesigner::mouseDrag(const juce::MouseEvent &e) {
   }
 
   if (isDrawingWire) {
-    wireEndPoint = screenToCanvas(e.position);
+    auto canvasPos = screenToCanvas(e.position);
+    int snappedNode = findNodeAt(canvasPos);
+
+    if (snappedNode >= 0 && snappedNode != wireStartNode) {
+      // Find the node position to snap the preview to
+      for (const auto &view : componentViews) {
+        for (const auto &term : view->getTerminalPositions()) {
+          if (term.first == snappedNode) {
+            wireEndPoint = term.second;
+            repaint();
+            return;
+          }
+        }
+      }
+    }
+
+    wireEndPoint = canvasPos;
     repaint();
     return;
   }
@@ -244,13 +271,23 @@ void CircuitDesigner::mouseDrag(const juce::MouseEvent &e) {
       comp->setPosition(snappedPos);
     }
 
+    updateWirePositionsForComponent(selectedComponent);
+
     repaint();
   }
 }
 
 void CircuitDesigner::mouseUp(const juce::MouseEvent &e) {
-  juce::ignoreUnused(e);
   isPanning = false;
+
+  if (isDrawingWire) {
+    auto canvasPos = screenToCanvas(e.position);
+    int endNode = findNodeAt(canvasPos);
+
+    if (endNode >= 0 && endNode != wireStartNode) {
+      finishWire(endNode);
+    }
+  }
 }
 
 void CircuitDesigner::mouseDoubleClick(const juce::MouseEvent &e) {
@@ -271,7 +308,7 @@ void CircuitDesigner::mouseWheelMove(const juce::MouseEvent &e,
   float zoomDelta = wheel.deltaY * 0.1f;
   float newZoom = juce::jlimit(0.25f, 4.0f, zoomLevel + zoomDelta);
 
-  if (newZoom != zoomLevel) {
+  if (std::abs(newZoom - zoomLevel) > 1e-4f) {
     // Adjust offset to zoom towards mouse
     float zoomRatio = newZoom / zoomLevel;
     viewOffset = mouseCanvasPos - (mouseCanvasPos - viewOffset) / zoomRatio;
@@ -288,6 +325,7 @@ bool CircuitDesigner::isInterestedInDragSource(
 
 void CircuitDesigner::itemDragEnter(const SourceDetails &dragSourceDetails) {
   juce::ignoreUnused(dragSourceDetails);
+  cancelWire();
   showDragPreview = true;
   repaint();
 }
@@ -312,6 +350,8 @@ void CircuitDesigner::itemDragMove(const SourceDetails &dragSourceDetails) {
     dragPreviewType = ComponentType::AudioInput;
   else if (desc == "component:output")
     dragPreviewType = ComponentType::AudioOutput;
+  else if (desc == "component:ground")
+    dragPreviewType = ComponentType::Ground;
 
   repaint();
 }
@@ -323,6 +363,7 @@ void CircuitDesigner::itemDragExit(const SourceDetails &dragSourceDetails) {
 }
 
 void CircuitDesigner::itemDropped(const SourceDetails &dragSourceDetails) {
+  cancelWire();
   showDragPreview = false;
 
   auto canvasPos =
@@ -346,6 +387,8 @@ void CircuitDesigner::itemDropped(const SourceDetails &dragSourceDetails) {
     type = ComponentType::AudioInput;
   else if (desc == "component:output")
     type = ComponentType::AudioOutput;
+  else if (desc == "component:ground")
+    type = ComponentType::Ground;
 
   addComponent(type, canvasPos);
   repaint();
@@ -453,6 +496,10 @@ void CircuitDesigner::addComponent(ComponentType type,
     comp = std::make_unique<AudioOutput>(id, name, node1,
                                          circuitGraph.getGroundNodeId());
     break;
+  case ComponentType::Ground:
+    name = "GND";
+    comp = std::make_unique<Ground>(id, name, circuitGraph.getGroundNodeId());
+    break;
   default:
     return;
   }
@@ -480,6 +527,30 @@ void CircuitDesigner::removeSelectedComponent() {
   }
 }
 
+void CircuitDesigner::removeSelectedWire() {
+  if (selectedWire) {
+    circuitGraph.removeWire(selectedWire->getId());
+    selectedWire = nullptr;
+    rebuildViews();
+
+    if (onCircuitChanged)
+      onCircuitChanged();
+  }
+}
+
+bool CircuitDesigner::keyPressed(const juce::KeyPress &key) {
+  if (key == juce::KeyPress::deleteKey || key == juce::KeyPress::backspaceKey) {
+    if (selectedComponent) {
+      removeSelectedComponent();
+      return true;
+    } else if (selectedWire) {
+      removeSelectedWire();
+      return true;
+    }
+  }
+  return false;
+}
+
 ComponentView *CircuitDesigner::findComponentAt(juce::Point<float> canvasPos) {
   for (auto &view : componentViews) {
     auto bounds = view->getBoundsInCanvas();
@@ -490,14 +561,25 @@ ComponentView *CircuitDesigner::findComponentAt(juce::Point<float> canvasPos) {
 }
 
 int CircuitDesigner::findNodeAt(juce::Point<float> canvasPos) {
+  auto screenMousePos = canvasToScreen(canvasPos);
+  float snapDist = 15.0f; // Screen pixels
+
+  int closestNode = -1;
+  float minDistance = snapDist;
+
   for (auto &view : componentViews) {
     auto terminals = view->getTerminalPositions();
     for (auto &[nodeId, pos] : terminals) {
-      if (canvasPos.getDistanceFrom(pos) < SNAP_DISTANCE)
-        return nodeId;
+      auto screenNodePos = canvasToScreen(pos);
+      float distance = screenMousePos.getDistanceFrom(screenNodePos);
+
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestNode = nodeId;
+      }
     }
   }
-  return -1;
+  return closestNode;
 }
 
 void CircuitDesigner::startWire(int startNode, juce::Point<float> startPos) {
@@ -526,13 +608,57 @@ void CircuitDesigner::cancelWire() {
 
 WireView *CircuitDesigner::findWireAt(juce::Point<float> canvasPos) {
   for (auto &wire : wireViews) {
-    if (wire->hitTest(canvasPos))
+    if (wire->hitTest(canvasPos, zoomLevel))
       return wire.get();
   }
   return nullptr;
 }
 
+void CircuitDesigner::updateWirePositionsForComponent(ComponentView *view) {
+  if (!view)
+    return;
+
+  auto terminals = view->getTerminalPositions();
+
+  for (auto &wire : wireViews) {
+    bool updated = false;
+
+    for (auto &[nodeId, pos] : terminals) {
+      if (wire->getNodeA() == nodeId) {
+        wire->setStartPosition(pos);
+        updated = true;
+      }
+      if (wire->getNodeB() == nodeId) {
+        wire->setEndPosition(pos);
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      // Wire position updated, UI will repaint with new positions
+    }
+  }
+}
+
 void CircuitDesigner::rebuildViews() {
+  // Store current selection IDs
+  int selectedComponentId = -1;
+  int selectedWireId = -1;
+
+  if (selectedComponent) {
+    if (auto *comp = selectedComponent->getComponent()) {
+      selectedComponentId = comp->getId();
+    }
+  }
+
+  if (selectedWire) {
+    selectedWireId = selectedWire->getId();
+  }
+
+  // Clear pointers to avoid dangling references
+  selectedComponent = nullptr;
+  selectedWire = nullptr;
+
   componentViews.clear();
   wireViews.clear();
 
@@ -568,6 +694,28 @@ void CircuitDesigner::rebuildViews() {
           std::make_unique<WireView>(wire.id, wire.nodeA, wire.nodeB);
       wireView->setPositions(startPos, endPos);
       wireViews.push_back(std::move(wireView));
+    }
+  }
+
+  // Restore selection if possible
+  if (selectedComponentId >= 0) {
+    for (auto &view : componentViews) {
+      if (auto *comp = view->getComponent()) {
+        if (comp->getId() == selectedComponentId) {
+          selectedComponent = view.get();
+          selectedComponent->setSelected(true);
+          break;
+        }
+      }
+    }
+  }
+
+  if (selectedWireId >= 0) {
+    for (auto &wire : wireViews) {
+      if (wire->getId() == selectedWireId) {
+        selectedWire = wire.get();
+        break;
+      }
     }
   }
 

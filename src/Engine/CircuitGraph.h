@@ -77,6 +77,9 @@ public:
   // Get components by type
   std::vector<CircuitComponent *> getComponentsByType(ComponentType type);
 
+  // Thread safety
+  juce::CriticalSection &getLock() const { return graphLock; }
+
 private:
   std::vector<Node> nodes;
   std::vector<std::unique_ptr<CircuitComponent>> components;
@@ -86,4 +89,6 @@ private:
   int nextComponentId = 0;
   int nextWireId = 0;
   int groundNodeId = -1;
+
+  mutable juce::CriticalSection graphLock;
 };

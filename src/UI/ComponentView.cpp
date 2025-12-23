@@ -1,5 +1,6 @@
 #include "ComponentView.h"
 #include "../Engine/Components/Component.h"
+#include "../Engine/Components/Ground.h"
 #include "../Engine/Components/Potentiometer.h"
 #include "../Engine/Components/Switch.h"
 #include "../Engine/Components/VacuumTube.h"
@@ -54,6 +55,9 @@ void ComponentView::draw(juce::Graphics &g,
     break;
   case ComponentType::AudioOutput:
     drawAudioOutput(g, bounds);
+    break;
+  case ComponentType::Ground:
+    drawGround(g, bounds);
     break;
   default:
     g.setColour(juce::Colour(0xFFcccccc));
@@ -249,6 +253,24 @@ void ComponentView::drawAudioOutput(juce::Graphics &g,
              juce::Justification::centred);
 }
 
+void ComponentView::drawGround(juce::Graphics &g,
+                               juce::Rectangle<float> bounds) {
+  g.setColour(juce::Colour(0xFFcccccc));
+
+  float cx = bounds.getCentreX();
+  float cy = bounds.getCentreY();
+  float w = bounds.getWidth() * 0.8f;
+  float h = bounds.getHeight() * 0.6f;
+
+  // Vertical line from top
+  g.drawLine(cx, -HEIGHT / 2, cx, cy + h / 6, 2.0f);
+
+  // Ground symbol lines
+  g.drawLine(cx - w / 4, cy + h / 6, cx + w / 4, cy + h / 6, 2.0f);
+  g.drawLine(cx - w / 6, cy + h / 6 + 4, cx + w / 6, cy + h / 6 + 4, 2.0f);
+  g.drawLine(cx - w / 10, cy + h / 6 + 8, cx + w / 10, cy + h / 6 + 8, 2.0f);
+}
+
 juce::Rectangle<float> ComponentView::getBoundsInCanvas() const {
   return juce::Rectangle<float>(canvasPosition.x - WIDTH / 2,
                                 canvasPosition.y - HEIGHT / 2, WIDTH, HEIGHT);
@@ -261,7 +283,14 @@ ComponentView::getTerminalPositions() const {
   if (!component)
     return terminals;
 
-  // Standard two-terminal components
+  if (component->getType() == ComponentType::Ground) {
+    // Single terminal at top
+    terminals.push_back({component->getNode1(),
+                         canvasPosition + juce::Point<float>(0, -HEIGHT / 2)});
+    return terminals;
+  }
+
+  // Standard two-terminal components (including I/O)
   terminals.push_back({component->getNode1(),
                        canvasPosition + juce::Point<float>(-WIDTH / 2, 0)});
   terminals.push_back({component->getNode2(),

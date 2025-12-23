@@ -59,4 +59,5 @@ private:
   void drawVacuumTube(juce::Graphics &g, juce::Rectangle<float> bounds);
   void drawAudioInput(juce::Graphics &g, juce::Rectangle<float> bounds);
   void drawAudioOutput(juce::Graphics &g, juce::Rectangle<float> bounds);
+  void drawGround(juce::Graphics &g, juce::Rectangle<float> bounds);
 };

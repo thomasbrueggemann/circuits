@@ -159,6 +159,14 @@ void ComponentPalette::PaletteItem::drawSymbol(juce::Graphics &g,
     }
     break;
   }
+  case ComponentType::Ground: {
+    // Ground symbol
+    g.drawLine(cx, cy - h / 3, cx, cy + h / 6, 2.0f);
+    g.drawLine(cx - w / 4, cy + h / 6, cx + w / 4, cy + h / 6, 2.0f);
+    g.drawLine(cx - w / 6, cy + h / 6 + 4, cx + w / 6, cy + h / 6 + 4, 2.0f);
+    g.drawLine(cx - w / 10, cy + h / 6 + 8, cx + w / 10, cy + h / 6 + 8, 2.0f);
+    break;
+  }
   default:
     g.drawRect(bounds, 2.0f);
     break;
@@ -212,7 +220,8 @@ void ComponentPalette::createItems() {
       {"Switch", "component:switch", ComponentType::Switch},
       {"Tube", "component:tube", ComponentType::VacuumTube},
       {"Input", "component:input", ComponentType::AudioInput},
-      {"Output", "component:output", ComponentType::AudioOutput}};
+      {"Output", "component:output", ComponentType::AudioOutput},
+      {"Ground", "component:ground", ComponentType::Ground}};
 
   for (const auto &info : itemInfos) {
     auto item =

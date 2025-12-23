@@ -5,17 +5,22 @@ CircuitEngine::CircuitEngine() {}
 CircuitEngine::~CircuitEngine() = default;
 
 void CircuitEngine::setCircuit(const CircuitGraph &graph) {
+  const juce::ScopedLock sl(renderLock);
   circuit = &graph;
   solver.setCircuit(graph);
 }
 
 void CircuitEngine::setSampleRate(double rate) {
+  const juce::ScopedLock sl(renderLock);
   sampleRate = rate;
   // Set MNA solver sample rate with oversampling
   solver.setSampleRate(rate * oversamplingFactor);
 }
 
 void CircuitEngine::processSample(float inputSample, float &outputSample) {
+  // Note: recursive lock is okay if called from processBlock
+  const juce::ScopedLock sl(renderLock);
+
   if (!circuit || circuit->getComponentCount() == 0) {
     outputSample = inputSample; // Bypass if no circuit
     return;
@@ -51,15 +56,18 @@ void CircuitEngine::processSample(float inputSample, float &outputSample) {
 
 void CircuitEngine::processBlock(const float *input, float *output,
                                  int numSamples) {
+  const juce::ScopedLock sl(renderLock);
   for (int i = 0; i < numSamples; ++i) {
     processSample(input[i], output[i]);
   }
 }
 
 void CircuitEngine::setComponentValue(int componentId, double value) {
+  const juce::ScopedLock sl(renderLock);
   solver.updateComponentValue(componentId, value);
 }
 
 double CircuitEngine::getNodeVoltage(int nodeId) const {
+  const juce::ScopedLock sl(renderLock);
   return solver.getNodeVoltage(nodeId);
 }

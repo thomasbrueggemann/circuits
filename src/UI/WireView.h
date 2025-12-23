@@ -18,6 +18,8 @@ public:
   juce::Point<float> getStartPosition() const { return startPosition; }
   juce::Point<float> getEndPosition() const { return endPosition; }
   void setPositions(juce::Point<float> start, juce::Point<float> end);
+  void setStartPosition(juce::Point<float> pos) { startPosition = pos; }
+  void setEndPosition(juce::Point<float> pos) { endPosition = pos; }
 
   // Wire identification
   int getId() const { return id; }
@@ -25,7 +27,7 @@ public:
   int getNodeB() const { return nodeB; }
 
   // Hit testing
-  bool hitTest(juce::Point<float> canvasPos) const;
+  bool hitTest(juce::Point<float> canvasPos, float zoom) const;
 
   // Signal visualization
   void setSignalLevel(float level) { signalLevel = level; }

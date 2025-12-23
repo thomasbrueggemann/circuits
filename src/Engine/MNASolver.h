@@ -42,6 +42,22 @@ public:
   void updateComponentValue(int componentId, double value);
 
 private:
+  // Cached component info for audio thread safety
+  struct CachedCapacitor {
+    int node1;
+    int node2;
+    double capacitance;
+    int stateIndex;
+    class Capacitor *component;
+  };
+
+  struct CachedNonLinear {
+    class VacuumTube *tube;
+    int gridNode;
+    int cathodeNode;
+    int plateNode;
+  };
+
   // Build helpers
   void stampResistor(int node1, int node2, double resistance);
   void stampCapacitor(int node1, int node2, double capacitance);
@@ -62,6 +78,10 @@ private:
 
   // Circuit reference
   const CircuitGraph *circuitGraph = nullptr;
+
+  // Cached lists for audio thread
+  std::vector<CachedCapacitor> cachedCapacitors;
+  std::vector<CachedNonLinear> cachedNonLinear;
 
   // MNA matrices
   std::vector<std::vector<double>> G; // Conductance matrix

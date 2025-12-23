@@ -25,6 +25,10 @@ public:
   int getNode3() const { return wiperNode; }
   void setNode3(int node) { wiperNode = node; }
 
+  std::vector<int> getAllNodes() const override {
+    return {terminalNode1, terminalNode2, wiperNode};
+  }
+
   // Total resistance end-to-end
   double getTotalResistance() const { return totalR; }
   void setTotalResistance(double r) {
@@ -57,6 +61,8 @@ public:
   // Get effective position with taper applied
   double getEffectivePosition() const {
     switch (taper) {
+    case Taper::Linear:
+      return wiperPosition;
     case Taper::Logarithmic:
       // Audio taper: slow at start, fast at end
       return std::pow(wiperPosition, 2.0);

@@ -33,6 +33,11 @@ public:
   void setNode1(int node) { terminalNode1 = node; }
   void setNode2(int node) { terminalNode2 = node; }
 
+  // Get all nodes connected to this component (for deletion)
+  virtual std::vector<int> getAllNodes() const {
+    return {terminalNode1, terminalNode2};
+  }
+
   // Position for UI
   juce::Point<float> getPosition() const { return position; }
   void setPosition(juce::Point<float> pos) { position = pos; }

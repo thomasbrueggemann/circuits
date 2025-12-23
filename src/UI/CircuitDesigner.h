@@ -33,6 +33,8 @@ public:
   void mouseWheelMove(const juce::MouseEvent &e,
                       const juce::MouseWheelDetails &wheel) override;
 
+  bool keyPressed(const juce::KeyPress &key) override;
+
   // Drag and drop
   bool
   isInterestedInDragSource(const SourceDetails &dragSourceDetails) override;
@@ -54,7 +56,6 @@ public:
 
 private:
   CircuitGraph &circuitGraph;
-  ComponentPalette &palette;
 
   // Component views
   std::vector<std::unique_ptr<ComponentView>> componentViews;
@@ -69,7 +70,6 @@ private:
   Mode currentMode = Mode::Select;
 
   ComponentView *selectedComponent = nullptr;
-  ComponentView *hoveredComponent = nullptr;
   WireView *selectedWire = nullptr;
 
   // Wire drawing
@@ -104,6 +104,7 @@ private:
   // Component management
   void addComponent(ComponentType type, juce::Point<float> position);
   void removeSelectedComponent();
+  void removeSelectedWire();
   ComponentView *findComponentAt(juce::Point<float> canvasPos);
   int findNodeAt(juce::Point<float> canvasPos);
 
@@ -112,6 +113,7 @@ private:
   void finishWire(int endNode);
   void cancelWire();
   WireView *findWireAt(juce::Point<float> canvasPos);
+  void updateWirePositionsForComponent(ComponentView *view);
 
   // Rebuild views from graph
   void rebuildViews();

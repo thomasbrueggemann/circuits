@@ -65,8 +65,9 @@ void WireView::draw(juce::Graphics &g, juce::Point<float> startScreen,
   }
 }
 
-bool WireView::hitTest(juce::Point<float> canvasPos) const {
+bool WireView::hitTest(juce::Point<float> canvasPos, float zoom) const {
   // Check distance from point to line segments
+  float tolerance = HIT_TOLERANCE / zoom;
 
   // Calculate midpoint for orthogonal routing
   float midX = (startPosition.x + endPosition.x) / 2.0f;
@@ -96,7 +97,7 @@ bool WireView::hitTest(juce::Point<float> canvasPos) const {
 
     if (lengthSq == 0.0f) {
       // Segment is a point
-      if (canvasPos.getDistanceFrom(p1) < HIT_TOLERANCE)
+      if (canvasPos.getDistanceFrom(p1) < tolerance)
         return true;
       continue;
     }
@@ -109,7 +110,7 @@ bool WireView::hitTest(juce::Point<float> canvasPos) const {
     juce::Point<float> projection(p1.x + t * dx, p1.y + t * dy);
     float distance = canvasPos.getDistanceFrom(projection);
 
-    if (distance < HIT_TOLERANCE)
+    if (distance < tolerance)
       return true;
   }
 
