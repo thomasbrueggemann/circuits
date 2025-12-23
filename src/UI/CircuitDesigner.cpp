@@ -86,18 +86,8 @@ void CircuitDesigner::drawWirePreview(juce::Graphics &g) {
   if (wireStartNode < 0)
     return;
 
-  // Find start position from node
-  juce::Point<float> startPos;
-  for (auto &view : componentViews) {
-    auto terminals = view->getTerminalPositions();
-    for (auto &[nodeId, pos] : terminals) {
-      if (nodeId == wireStartNode) {
-        startPos = canvasToScreen(pos);
-        break;
-      }
-    }
-  }
-
+  // Use stored start position (canvas coordinates -> screen)
+  auto startPos = canvasToScreen(wireStartPosition);
   auto endPos = canvasToScreen(wireEndPoint);
 
   g.setColour(juce::Colour(0xFF00ff88).withAlpha(0.7f));
@@ -112,6 +102,37 @@ void CircuitDesigner::drawWirePreview(juce::Graphics &g) {
   wirePath.lineTo(endPos);
 
   g.strokePath(wirePath, juce::PathStrokeType(2.0f * zoomLevel));
+}
+
+// ... (skip lines)
+
+void CircuitDesigner::startWire(int startNode, juce::Point<float> startPos) {
+  isDrawingWire = true;
+  wireStartNode = startNode;
+
+  // Snap start position to the node center for accurate drawing
+  // We can find the node again or just use the passed pos if we trust it.
+  // Ideally, find the node center:
+  juce::Point<float> nodeCenter = startPos;
+
+  for (auto &view : componentViews) {
+    for (auto &[nodeId, pos] : view->getTerminalPositions()) {
+      if (nodeId == startNode) {
+        // If the passed startPos is close to this node, snap to it
+        // This handles the shared node case by snapping to the one we clicked
+        // CLOSEST to But since 'startPos' comes from 'mouseDown', it's just the
+        // mouse click. We want the exact terminal position.
+        if (pos.getDistanceFrom(startPos) < 20.0f) {
+          nodeCenter = pos;
+          goto found;
+        }
+      }
+    }
+  }
+found:
+  wireStartPosition = nodeCenter;
+  wireEndPoint = nodeCenter;
+  repaint();
 }
 
 void CircuitDesigner::drawDragPreview(juce::Graphics &g) {
@@ -215,24 +236,26 @@ void CircuitDesigner::mouseDown(const juce::MouseEvent &e) {
   // Prioritize finishing an active wire if we click a node
   int clickedNode = findNodeAt(canvasPos);
   if (isDrawingWire && clickedNode >= 0) {
-    finishWire(clickedNode);
+    if (clickedNode != wireStartNode) {
+      finishWire(clickedNode);
+    }
+    return;
+  }
+
+  // Always start a wire if connected to a node, even if inside a component
+  if (clickedNode >= 0) {
+    startWire(clickedNode, canvasPos);
+    grabKeyboardFocus();
     return;
   }
 
   // Check if clicking on a component body first (for selection/dragging)
   ComponentView *clickedComponent = findComponentAt(canvasPos);
 
-  // Start a wire if we clicked a node and are NOT over a component body,
-  // or if we are clicking very precisely on a node
-  if (clickedNode >= 0 && (!clickedComponent || e.mods.isShiftDown())) {
-    startWire(clickedNode, canvasPos);
-    grabKeyboardFocus();
-    return;
-  }
-
   // Clicked on empty space or other element - cancel wire if drawing
   if (isDrawingWire) {
-    cancelWire();
+    // If clicking on empty space, we just update the end point, don't cancel
+    // This allows click-move-click worklow
   }
 
   // Check if clicking on a wire
@@ -270,6 +293,11 @@ void CircuitDesigner::mouseDown(const juce::MouseEvent &e) {
     selectedComponent = nullptr;
   }
   selectedWire = nullptr;
+
+  // If we clicked empty space while drawing wire, cancel it
+  if (isDrawingWire && clickedNode < 0) {
+    cancelWire();
+  }
 
   if (onWireSelected)
     onWireSelected(-1);
@@ -335,8 +363,34 @@ void CircuitDesigner::mouseUp(const juce::MouseEvent &e) {
     if (endNode >= 0 && endNode != wireStartNode) {
       finishWire(endNode);
     } else {
-      cancelWire();
+      // Do nothing if we release on the start node or empty space
+      // This allows the "click-move-click" workflow
+      // We only cancel if explicitly clicking empty space in mouseDown or Right
+      // Click
     }
+  }
+}
+
+void CircuitDesigner::mouseMove(const juce::MouseEvent &e) {
+  if (isDrawingWire) {
+    auto canvasPos = screenToCanvas(e.position);
+    int snappedNode = findNodeAt(canvasPos);
+
+    if (snappedNode >= 0 && snappedNode != wireStartNode) {
+      // Find the node position to snap the preview to
+      for (const auto &view : componentViews) {
+        for (const auto &term : view->getTerminalPositions()) {
+          if (term.first == snappedNode) {
+            wireEndPoint = term.second;
+            repaint();
+            return;
+          }
+        }
+      }
+    }
+
+    wireEndPoint = canvasPos;
+    repaint();
   }
 }
 
@@ -651,7 +705,7 @@ ComponentView *CircuitDesigner::findComponentAt(juce::Point<float> canvasPos) {
 
 int CircuitDesigner::findNodeAt(juce::Point<float> canvasPos) {
   auto screenMousePos = canvasToScreen(canvasPos);
-  float snapDist = 12.0f; // Screen pixels (slightly tighter)
+  float snapDist = 15.0f; // Screen pixels (larger for easier tapping)
 
   int closestNode = -1;
   float minDistance = snapDist;
@@ -669,13 +723,6 @@ int CircuitDesigner::findNodeAt(juce::Point<float> canvasPos) {
     }
   }
   return closestNode;
-}
-
-void CircuitDesigner::startWire(int startNode, juce::Point<float> startPos) {
-  isDrawingWire = true;
-  wireStartNode = startNode;
-  wireEndPoint = startPos;
-  repaint();
 }
 
 void CircuitDesigner::finishWire(int endNode) {

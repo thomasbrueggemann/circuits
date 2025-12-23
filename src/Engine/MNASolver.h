@@ -58,11 +58,19 @@ private:
     int plateNode;
   };
 
+  struct CachedAudioInput {
+    class AudioInput *component;
+    int branchIndex;
+  };
+
   // Build helpers
   void stampResistor(int node1, int node2, double resistance);
+  void stampResistorStatic(int node1, int node2, double resistance);
   void stampCapacitor(int node1, int node2, double capacitance);
   void stampVoltageSource(int node1, int node2, int branchIndex,
                           double voltage);
+  void stampVoltageSourceStatic(int node1, int node2, int branchIndex,
+                                double voltage);
   void stampCurrentSource(int node1, int node2, double current);
   void stampVCCS(int n1, int n2, int nc1, int nc2,
                  double gm); // Voltage-controlled current source
@@ -82,12 +90,17 @@ private:
   // Cached lists for audio thread
   std::vector<CachedCapacitor> cachedCapacitors;
   std::vector<CachedNonLinear> cachedNonLinear;
+  std::vector<CachedAudioInput> cachedAudioInputs;
 
   // MNA matrices
   std::vector<std::vector<double>> G; // Conductance matrix
   std::vector<double> z;              // RHS vector
   std::vector<double> x;              // Solution vector
   std::vector<double> xPrev;          // Previous solution (for capacitors)
+
+  // Static matrix parts (for optimization and stability)
+  std::vector<std::vector<double>> G_static;
+  std::vector<double> z_static;
 
   // LU decomposition storage
   std::vector<std::vector<double>> LU;

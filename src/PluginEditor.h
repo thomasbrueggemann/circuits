@@ -19,6 +19,9 @@ public:
   void resized() override;
   void timerCallback() override;
 
+  void updateControlPanel();
+  void autoProbe();
+
 private:
   CircuitsAudioProcessor &audioProcessor;
 
@@ -34,8 +37,6 @@ private:
   static constexpr int PALETTE_WIDTH = 80;
   static constexpr int CONTROL_PANEL_WIDTH = 200;
   static constexpr int OSCILLOSCOPE_HEIGHT = 150;
-
-  void updateControlPanel();
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CircuitsAudioProcessorEditor)
 };

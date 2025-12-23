@@ -315,13 +315,27 @@ ComponentView::getTerminalPositions() const {
     return terminals;
   }
 
-  // Standard two-terminal components (including I/O)
+  // Standard two-terminal components
   if (component->getType() != ComponentType::VacuumTube &&
-      component->getType() != ComponentType::Potentiometer) {
+      component->getType() != ComponentType::Potentiometer &&
+      component->getType() != ComponentType::AudioInput &&
+      component->getType() != ComponentType::AudioOutput) {
     terminals.push_back(
         {component->getNode1(), getRotatedPoint({-WIDTH / 2, 0})});
     terminals.push_back(
         {component->getNode2(), getRotatedPoint({WIDTH / 2, 0})});
+  }
+
+  // Audio I/O
+  if (component->getType() == ComponentType::AudioInput) {
+    // In: Node 1 (Signal) at Right. Node 2 (Ground) hidden/unused for wiring
+    // here
+    terminals.push_back(
+        {component->getNode1(), getRotatedPoint({WIDTH / 2, 0})});
+  } else if (component->getType() == ComponentType::AudioOutput) {
+    // Out: Node 1 (Signal) at Left. Node 2 (Ground) hidden/unused
+    terminals.push_back(
+        {component->getNode1(), getRotatedPoint({-WIDTH / 2, 0})});
   }
 
   // Three-terminal components

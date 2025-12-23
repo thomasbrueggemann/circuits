@@ -36,17 +36,7 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
     auto &graph = audioProcessor.getCircuitGraph();
     engine.setCircuit(graph);
 
-    // Auto-probe: If no probe is active, try to find an output node
-    if (audioProcessor.getVoltageHistory(0).empty() ||
-        true) { // Always check for better node
-      for (const auto &comp : graph.getComponents()) {
-        if (comp->getType() == ComponentType::AudioOutput) {
-          audioProcessor.setProbeNode(comp->getNode1());
-          oscilloscopeView->setProbeActive(true);
-          break;
-        }
-      }
-    }
+    autoProbe();
   };
 
   // Set editor size
@@ -54,11 +44,11 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
   setResizable(true, true);
   setResizeLimits(800, 600, 2400, 1600);
 
-  // Debug: Set a distinct window name
-  setName("CIRCUITS - TOOLBAR DEBUG (MAGENTA)");
-
   // Start timer for UI updates
   startTimerHz(30);
+
+  // Initial auto-probe
+  autoProbe();
 }
 
 CircuitsAudioProcessorEditor::~CircuitsAudioProcessorEditor() { stopTimer(); }
@@ -79,10 +69,6 @@ void CircuitsAudioProcessorEditor::paint(juce::Graphics &g) {
   g.drawHorizontalLine(getHeight() - OSCILLOSCOPE_HEIGHT,
                        static_cast<float>(PALETTE_WIDTH),
                        static_cast<float>(getWidth() - CONTROL_PANEL_WIDTH));
-
-  // Debug: Draw TopBar area boundary
-  g.setColour(juce::Colours::yellow);
-  g.drawRect(0, 0, getWidth(), TOP_BAR_HEIGHT, 2);
 }
 
 void CircuitsAudioProcessorEditor::resized() {
@@ -105,10 +91,18 @@ void CircuitsAudioProcessorEditor::resized() {
 }
 
 void CircuitsAudioProcessorEditor::timerCallback() {
+  // Update simulation state display
+  oscilloscopeView->setSimulationRunning(
+      audioProcessor.getCircuitEngine().isSimulationActive());
+
   // Update oscilloscope with latest voltage history
-  if (audioProcessor.getCircuitGraph().getNodeCount() > 0) {
-    const auto &history = audioProcessor.getVoltageHistory(0);
-    oscilloscopeView->updateWaveform(history);
+  int nodeCount = audioProcessor.getCircuitGraph().getNodeCount();
+  oscilloscopeView->setNodeInfo(audioProcessor.getProbeNodeId(), nodeCount);
+
+  if (nodeCount > 0) {
+    std::vector<float> samples;
+    audioProcessor.getLatestSamples(samples);
+    oscilloscopeView->updateWaveform(samples);
   }
 
   oscilloscopeView->repaint();
@@ -116,4 +110,22 @@ void CircuitsAudioProcessorEditor::timerCallback() {
 
 void CircuitsAudioProcessorEditor::updateControlPanel() {
   controlPanel->rebuildControls();
+}
+
+void CircuitsAudioProcessorEditor::autoProbe() {
+  auto &graph = audioProcessor.getCircuitGraph();
+
+  for (const auto &comp : graph.getComponents()) {
+    if (comp->getType() == ComponentType::AudioOutput) {
+      audioProcessor.setProbeNode(comp->getNode1());
+      oscilloscopeView->setProbeActive(true);
+      return;
+    }
+  }
+
+  // If no output, try to find any node with a connection
+  if (graph.getNodeCount() > 0) {
+    audioProcessor.setProbeNode(0); // Probe first node
+    oscilloscopeView->setProbeActive(true);
+  }
 }

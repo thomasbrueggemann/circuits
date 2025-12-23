@@ -89,7 +89,7 @@ void TopBar::paint(juce::Graphics &g) {
   auto bounds = getLocalBounds().toFloat();
 
   // Background
-  g.setColour(juce::Colours::magenta);
+  g.setColour(juce::Colour(0xFF1a1a2e).brighter(0.05f));
   g.fillRect(bounds);
 
   // Border

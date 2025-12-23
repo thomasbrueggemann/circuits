@@ -1,6 +1,7 @@
 #include "OscilloscopeView.h"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 OscilloscopeView::OscilloscopeView() {
   waveformBuffer.resize(BUFFER_SIZE, 0.0f);
@@ -29,21 +30,28 @@ void OscilloscopeView::resized() {}
 void OscilloscopeView::timerCallback() { repaint(); }
 
 void OscilloscopeView::updateWaveform(const std::vector<float> &samples) {
-  for (float sample : samples) {
-    waveformBuffer[writeIndex] = sample;
-    writeIndex = (writeIndex + 1) % BUFFER_SIZE;
+  // Just copy the unwrapped samples
+  size_t count = std::min(samples.size(), waveformBuffer.size());
+  std::copy(samples.begin(), samples.begin() + count, waveformBuffer.begin());
 
-    // Update auto-scale
-    if (autoScale) {
-      float absSample = std::abs(sample);
-      if (absSample > autoScaleMax) {
-        autoScaleMax = absSample;
-      } else {
-        // Slowly decay max
-        autoScaleMax *= 0.9999f;
-        autoScaleMax = std::max(autoScaleMax, 0.01f);
-      }
+  // Diagnostics
+  lastSampleBatch = samples;
+  logicHeartbeat++;
+
+  // Update auto-scale based on the new batch
+  if (autoScale) {
+    float maxInBatch = 0.05f;
+    for (float sample : samples) {
+      maxInBatch = std::max(maxInBatch, std::abs(sample));
     }
+
+    // Smoothly transition autoScaleMax
+    if (maxInBatch > autoScaleMax) {
+      autoScaleMax = maxInBatch;
+    } else {
+      autoScaleMax = autoScaleMax * 0.9f + maxInBatch * 0.1f;
+    }
+    autoScaleMax = std::max(autoScaleMax, 0.05f);
   }
 }
 
@@ -132,11 +140,10 @@ void OscilloscopeView::drawWaveform(juce::Graphics &g,
   bool pathStarted = false;
 
   for (int x = 0; x < static_cast<int>(gridBounds.getWidth()); ++x) {
-    // Get sample at this position
+    // Get sample at this position (samples are now chronological in the buffer)
+    float progress = static_cast<float>(x) / gridBounds.getWidth();
     size_t sampleIndex =
-        (writeIndex + BUFFER_SIZE -
-         static_cast<size_t>(gridBounds.getWidth() - x) * samplesPerPixel) %
-        BUFFER_SIZE;
+        static_cast<size_t>(progress * (waveformBuffer.size() - 1));
     float sample = waveformBuffer[sampleIndex];
 
     // Normalize and scale
@@ -186,7 +193,44 @@ void OscilloscopeView::drawLabels(juce::Graphics &g,
     g.drawText(juce::String(timeScale, 1) + " ms/div",
                bounds.removeFromBottom(12).removeFromRight(100),
                juce::Justification::centredRight);
+
+    // Debug info
+    g.setColour(juce::Colours::yellow.withAlpha(0.5f));
+    g.setFont(9.0f);
+    juce::String debugInfo = "ProbeID: " + juce::String(lastProbeNodeId) +
+                             " Nodes: " + juce::String(lastNodeCount) +
+                             " Scale: " + juce::String(vScale, 3) +
+                             " Max: " + juce::String(autoScaleMax, 3);
+    g.drawText(debugInfo, bounds.removeFromTop(10), juce::Justification::right);
+
+    // Raw Values
+    g.setColour(juce::Colours::cyan.withAlpha(0.6f));
+    juce::String rawVals = "Raw [0..4]: ";
+    for (int i = 0; i < std::min(5, (int)lastSampleBatch.size()); ++i) {
+      rawVals += juce::String(lastSampleBatch[i], 4) + " ";
+    }
+    g.drawText(rawVals, bounds.removeFromTop(10), juce::Justification::left);
   }
+
+  // Logic Heartbeat dot (blinks top-left)
+  if ((logicHeartbeat / 5) % 2 == 0) {
+    g.setColour(juce::Colours::yellow);
+    g.fillEllipse(5, 5, 4, 4);
+  }
+  // Simulation state overlay
+  g.setColour(juce::Colours::white.withAlpha(0.7f));
+  g.setFont(12.0f);
+  juce::String simStateText;
+  if (simulationRunning) {
+    simStateText = "SIMULATION RUNNING";
+    g.setColour(juce::Colours::green.withAlpha(0.7f));
+  } else {
+    simStateText = "SIMULATION STOPPED";
+    g.setColour(juce::Colours::red.withAlpha(0.7f));
+  }
+  g.drawText(simStateText,
+             bounds.withSizeKeepingCentre(200, 20).removeFromBottom(20),
+             juce::Justification::centred);
 }
 
 void OscilloscopeView::drawNoSignalMessage(juce::Graphics &g,
@@ -196,8 +240,8 @@ void OscilloscopeView::drawNoSignalMessage(juce::Graphics &g,
 
   juce::String msg = "Click a wire to probe";
   if (!probeActive)
-    msg = "Connect AudioOutput or click wire to probe\nEnsure Simulation Power "
-          "is ON";
+    msg = "No Probe Active\n\nClick a wire or connect AudioOutput\nEnsure "
+          "START is pressed";
 
   g.drawText(msg, bounds, juce::Justification::centred);
 }

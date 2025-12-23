@@ -64,6 +64,8 @@ void MNASolver::buildMatrix() {
   // Initialize matrices
   G.assign(matrixSize, std::vector<double>(matrixSize, 0.0));
   z.assign(matrixSize, 0.0);
+  G_static.assign(matrixSize, std::vector<double>(matrixSize, 0.0));
+  z_static.assign(matrixSize, 0.0);
   x.assign(matrixSize, 0.0);
   xPrev.assign(matrixSize, 0.0);
   LU.assign(matrixSize, std::vector<double>(matrixSize, 0.0));
@@ -79,6 +81,7 @@ void MNASolver::buildMatrix() {
   // Clear cached lists
   cachedCapacitors.clear();
   cachedNonLinear.clear();
+  cachedAudioInputs.clear();
 
   clearMatrix();
 
@@ -92,13 +95,13 @@ void MNASolver::buildMatrix() {
     switch (comp->getType()) {
     case ComponentType::Resistor: {
       auto *r = static_cast<Resistor *>(comp.get());
-      stampResistor(n1, n2, r->getResistance());
+      stampResistorStatic(n1, n2, r->getResistance());
       break;
     }
     case ComponentType::Capacitor: {
       auto *c = static_cast<Capacitor *>(comp.get());
       double geq = 2.0 * c->getCapacitance() / dt;
-      stampResistor(n1, n2, 1.0 / geq);
+      stampResistorStatic(n1, n2, 1.0 / geq);
 
       // Cache for audio thread
       cachedCapacitors.push_back({n1, n2, c->getCapacitance(),
@@ -118,18 +121,20 @@ void MNASolver::buildMatrix() {
       r1 = std::max(r1, 0.01);
       r2 = std::max(r2, 0.01);
 
-      stampResistor(n1, n3, r1);
-      stampResistor(n3, n2, r2);
+      stampResistorStatic(n1, n3, r1);
+      stampResistorStatic(n3, n2, r2);
       break;
     }
     case ComponentType::Switch: {
       auto *s = static_cast<Switch *>(comp.get());
       double resistance = s->isClosed() ? 0.001 : 1e9;
-      stampResistor(n1, n2, resistance);
+      stampResistorStatic(n1, n2, resistance);
       break;
     }
     case ComponentType::AudioInput: {
-      stampVoltageSource(n1, n2, vsourceIndex, 0.0);
+      auto *audioIn = static_cast<AudioInput *>(comp.get());
+      stampVoltageSourceStatic(n1, n2, vsourceIndex, 0.0);
+      cachedAudioInputs.push_back({audioIn, vsourceIndex});
       inputNodeIndex = vsourceIndex;
       vsourceIndex++;
       break;
@@ -150,6 +155,21 @@ void MNASolver::buildMatrix() {
       break;
     }
   }
+
+  // Stamp wires as very low resistance resistors (approx short circuit)
+  // We use a small non-zero value to avoid singular matrices and numerical
+  // issues
+  constexpr double WIRE_RESISTANCE = 0.001;
+
+  for (const auto &wire : circuitGraph->getWires()) {
+    int n1 = nodeToIndex[wire.nodeA];
+    int n2 = nodeToIndex[wire.nodeB];
+    stampResistorStatic(n1, n2, WIRE_RESISTANCE);
+  }
+
+  // Initial copy to active matrices
+  G = G_static;
+  z = z_static;
 
   // Update capacitor state vectors size
   if (capVoltages.size() != cachedCapacitors.size()) {
@@ -256,8 +276,13 @@ bool MNASolver::solve() {
 bool MNASolver::solveNonlinear(int maxIterations, double tolerance) {
   // Newton-Raphson iteration
   for (int iter = 0; iter < maxIterations; ++iter) {
-    // Rebuild matrix with current operating point
-    clearMatrix();
+    // Rebuild matrix from static base + nonlinear stubs
+    G = G_static;
+    z = z_static;
+
+    // Add capacitor-like sources if needed (already in z from step())
+    // Actually, step() should have set z before calling solve()
+
     updateNonlinearStamps();
 
     if (!luDecompose())
@@ -388,9 +413,13 @@ void MNASolver::step(double inputVoltage) {
   if (matrixSize == 0 || !circuitGraph)
     return;
 
+  // Reset to static base
+  G = G_static;
+  z = z_static;
+
   const juce::ScopedLock sl(circuitGraph->getLock());
 
-  // Update capacitor companion models
+  // Update capacitor companion models (add to z)
   for (const auto &cap : cachedCapacitors) {
     int n1 = cap.node1;
     int n2 = cap.node2;
@@ -406,18 +435,50 @@ void MNASolver::step(double inputVoltage) {
     // Add equivalent current source
     stampCurrentSource(n1, n2, ieq);
 
-    // Update state
+    // Update state for NEXT step
     capVoltages[cap.stateIndex] = vCap;
     capCurrents[cap.stateIndex] = geq * vCap - ieq;
   }
 
-  // Set input voltage
+  // Set input voltage (overwrite in z)
   if (inputNodeIndex >= 0 && inputNodeIndex < matrixSize) {
     z[inputNodeIndex] = inputVoltage;
   }
 
+  // Update all audio inputs with their actual component voltages
+  for (const auto &input : cachedAudioInputs) {
+    if (input.branchIndex >= 0 && input.branchIndex < matrixSize) {
+      z[input.branchIndex] = input.component->getVoltage();
+    }
+  }
+
   // Solve the system
   solve();
+}
+
+void MNASolver::stampResistorStatic(int node1, int node2, double resistance) {
+  double g = 1.0 / std::max(resistance, 1e-9);
+  if (node1 >= 0)
+    G_static[node1][node1] += g;
+  if (node2 >= 0)
+    G_static[node2][node2] += g;
+  if (node1 >= 0 && node2 >= 0) {
+    G_static[node1][node2] -= g;
+    G_static[node2][node1] -= g;
+  }
+}
+
+void MNASolver::stampVoltageSourceStatic(int node1, int node2, int branchIndex,
+                                         double voltage) {
+  if (node1 >= 0) {
+    G_static[node1][branchIndex] += 1.0;
+    G_static[branchIndex][node1] += 1.0;
+  }
+  if (node2 >= 0) {
+    G_static[node2][branchIndex] -= 1.0;
+    G_static[branchIndex][node2] -= 1.0;
+  }
+  z_static[branchIndex] = voltage;
 }
 
 double MNASolver::getNodeVoltage(int nodeId) const {

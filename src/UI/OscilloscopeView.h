@@ -28,6 +28,11 @@ public:
   void setTimeScale(float msPerDiv) { timeScale = msPerDiv; }
   void setVoltageScale(float vPerDiv) { voltageScale = vPerDiv; }
   void setAutoScale(bool enable) { autoScale = enable; }
+  void setSimulationRunning(bool running) { simulationRunning = running; }
+  void setNodeInfo(int probeId, int totalNodes) {
+    lastProbeNodeId = probeId;
+    lastNodeCount = totalNodes;
+  }
 
 private:
   // Waveform data
@@ -41,6 +46,13 @@ private:
   float voltageScale = 1.0f; // V per division
   bool autoScale = true;
   float autoScaleMax = 1.0f;
+  bool simulationRunning = false;
+
+  // Diagnostics
+  uint32_t logicHeartbeat = 0;
+  std::vector<float> lastSampleBatch;
+  int lastProbeNodeId = -1;
+  int lastNodeCount = 0;
 
   // Grid settings
   static constexpr int GRID_DIVISIONS_X = 10;
