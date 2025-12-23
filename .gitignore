@@ -1,0 +1,34 @@
+# Build artifacts
+build/
+cmake-build-*/
+
+# JUCE framework (cloned separately)
+JUCE/
+
+# IDE files
+.idea/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+
+# macOS
+.DS_Store
+*.dSYM/
+
+# Compiled files
+*.o
+*.obj
+*.a
+*.lib
+*.dylib
+*.so
+*.dll
+
+# Plugin builds
+*.vst3
+*.component
+*.app
+
+# User-specific files
+*.user
+*.suo

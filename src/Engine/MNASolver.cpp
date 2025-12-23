@@ -1,0 +1,448 @@
+#include "MNASolver.h"
+#include "CircuitGraph.h"
+#include "Components/AudioInput.h"
+#include "Components/AudioOutput.h"
+#include "Components/Capacitor.h"
+#include "Components/Component.h"
+#include "Components/Potentiometer.h"
+#include "Components/Resistor.h"
+#include "Components/Switch.h"
+#include "Components/VacuumTube.h"
+#include <algorithm>
+#include <cmath>
+
+MNASolver::MNASolver() {}
+
+MNASolver::~MNASolver() = default;
+
+void MNASolver::setCircuit(const CircuitGraph &graph) {
+  circuitGraph = &graph;
+  buildMatrix();
+}
+
+void MNASolver::setSampleRate(double rate) {
+  sampleRate = rate;
+  dt = 1.0 / rate;
+
+  if (circuitGraph)
+    buildMatrix();
+}
+
+void MNASolver::buildMatrix() {
+  if (!circuitGraph)
+    return;
+
+  // Map nodes to matrix indices (ground is not included in matrix)
+  nodeToIndex.clear();
+  int index = 0;
+
+  for (const auto &node : circuitGraph->getNodes()) {
+    if (node.isGround) {
+      groundIndex = node.id;
+      nodeToIndex[node.id] = -1; // Ground has no index
+    } else {
+      nodeToIndex[node.id] = index++;
+    }
+  }
+
+  numNodes = index;
+
+  // Count voltage sources
+  numVSources = 0;
+  for (const auto &comp : circuitGraph->getComponents()) {
+    if (comp->getType() == ComponentType::AudioInput)
+      numVSources++;
+  }
+
+  matrixSize = numNodes + numVSources;
+
+  if (matrixSize == 0)
+    return;
+
+  // Initialize matrices
+  G.assign(matrixSize, std::vector<double>(matrixSize, 0.0));
+  z.assign(matrixSize, 0.0);
+  x.assign(matrixSize, 0.0);
+  xPrev.assign(matrixSize, 0.0);
+  LU.assign(matrixSize, std::vector<double>(matrixSize, 0.0));
+  pivot.assign(matrixSize, 0);
+
+  // Initialize capacitor state
+  capVoltages.clear();
+  capCurrents.clear();
+
+  clearMatrix();
+
+  // Stamp all components
+  int vsourceIndex = numNodes;
+
+  for (const auto &comp : circuitGraph->getComponents()) {
+    int n1 = nodeToIndex[comp->getNode1()];
+    int n2 = nodeToIndex[comp->getNode2()];
+
+    switch (comp->getType()) {
+    case ComponentType::Resistor: {
+      auto *r = static_cast<Resistor *>(comp.get());
+      stampResistor(n1, n2, r->getResistance());
+      break;
+    }
+    case ComponentType::Capacitor: {
+      auto *c = static_cast<Capacitor *>(comp.get());
+      // Trapezoidal: G_eq = 2C/dt
+      double geq = 2.0 * c->getCapacitance() / dt;
+      stampResistor(n1, n2, 1.0 / geq);
+      capVoltages.push_back(0.0);
+      capCurrents.push_back(0.0);
+      break;
+    }
+    case ComponentType::Potentiometer: {
+      auto *p = static_cast<Potentiometer *>(comp.get());
+      double pos = p->getWiperPosition();
+      double totalR = p->getTotalResistance();
+      double r1 = totalR * pos;
+      double r2 = totalR * (1.0 - pos);
+
+      int n3 = nodeToIndex[p->getNode3()];
+
+      // Minimum resistance to avoid division by zero
+      r1 = std::max(r1, 0.01);
+      r2 = std::max(r2, 0.01);
+
+      stampResistor(n1, n3, r1);
+      stampResistor(n3, n2, r2);
+      break;
+    }
+    case ComponentType::Switch: {
+      auto *s = static_cast<Switch *>(comp.get());
+      double resistance = s->isClosed() ? 0.001 : 1e9;
+      stampResistor(n1, n2, resistance);
+      break;
+    }
+    case ComponentType::AudioInput: {
+      // Voltage source: stamps into B, C matrices
+      stampVoltageSource(n1, n2, vsourceIndex, 0.0);
+      inputNodeIndex = vsourceIndex;
+      vsourceIndex++;
+      break;
+    }
+    case ComponentType::AudioOutput: {
+      auto *out = static_cast<AudioOutput *>(comp.get());
+      outputNodeIndex = n1 >= 0 ? n1 : n2;
+      // High impedance probe - just store the node we're measuring
+      juce::ignoreUnused(out);
+      break;
+    }
+    case ComponentType::VacuumTube: {
+      // Nonlinear - handled in Newton-Raphson iteration
+      break;
+    }
+    default:
+      break;
+    }
+  }
+}
+
+void MNASolver::clearMatrix() {
+  for (auto &row : G)
+    std::fill(row.begin(), row.end(), 0.0);
+  std::fill(z.begin(), z.end(), 0.0);
+}
+
+void MNASolver::stampResistor(int node1, int node2, double resistance) {
+  if (resistance <= 0.0)
+    return;
+
+  double g = 1.0 / resistance;
+
+  if (node1 >= 0)
+    G[node1][node1] += g;
+  if (node2 >= 0)
+    G[node2][node2] += g;
+  if (node1 >= 0 && node2 >= 0) {
+    G[node1][node2] -= g;
+    G[node2][node1] -= g;
+  }
+}
+
+void MNASolver::stampCapacitor(int node1, int node2, double capacitance) {
+  // Trapezoidal integration companion model
+  double geq = 2.0 * capacitance / dt;
+  stampResistor(node1, node2, 1.0 / geq);
+}
+
+void MNASolver::stampVoltageSource(int node1, int node2, int branchIndex,
+                                   double voltage) {
+  // Voltage source stamping in MNA
+  // G(n1, branch) = 1
+  // G(n2, branch) = -1
+  // G(branch, n1) = 1
+  // G(branch, n2) = -1
+  // z(branch) = voltage
+
+  if (node1 >= 0) {
+    G[node1][branchIndex] += 1.0;
+    G[branchIndex][node1] += 1.0;
+  }
+  if (node2 >= 0) {
+    G[node2][branchIndex] -= 1.0;
+    G[branchIndex][node2] -= 1.0;
+  }
+
+  z[branchIndex] = voltage;
+}
+
+void MNASolver::stampCurrentSource(int node1, int node2, double current) {
+  if (node1 >= 0)
+    z[node1] -= current;
+  if (node2 >= 0)
+    z[node2] += current;
+}
+
+void MNASolver::stampVCCS(int n1, int n2, int nc1, int nc2, double gm) {
+  // Voltage-controlled current source
+  // Current flows from n1 to n2, controlled by voltage nc1 to nc2
+  if (n1 >= 0 && nc1 >= 0)
+    G[n1][nc1] += gm;
+  if (n1 >= 0 && nc2 >= 0)
+    G[n1][nc2] -= gm;
+  if (n2 >= 0 && nc1 >= 0)
+    G[n2][nc1] -= gm;
+  if (n2 >= 0 && nc2 >= 0)
+    G[n2][nc2] += gm;
+}
+
+bool MNASolver::solve() {
+  if (matrixSize == 0)
+    return false;
+
+  // Check for nonlinear components
+  bool hasNonlinear = false;
+  for (const auto &comp : circuitGraph->getComponents()) {
+    if (comp->isNonLinear()) {
+      hasNonlinear = true;
+      break;
+    }
+  }
+
+  if (hasNonlinear)
+    return solveNonlinear();
+
+  // LU decomposition and solve
+  if (!luDecompose())
+    return false;
+
+  luSolve();
+  return true;
+}
+
+bool MNASolver::solveNonlinear(int maxIterations, double tolerance) {
+  // Newton-Raphson iteration
+  for (int iter = 0; iter < maxIterations; ++iter) {
+    // Rebuild matrix with current operating point
+    clearMatrix();
+    buildMatrix();
+    updateNonlinearStamps();
+
+    if (!luDecompose())
+      return false;
+
+    luSolve();
+
+    // Check convergence
+    double maxDiff = 0.0;
+    for (int i = 0; i < matrixSize; ++i) {
+      maxDiff = std::max(maxDiff, std::abs(x[i] - xPrev[i]));
+    }
+
+    xPrev = x;
+
+    if (maxDiff < tolerance)
+      return true;
+  }
+
+  return true; // Return result even if not fully converged
+}
+
+void MNASolver::updateNonlinearStamps() {
+  // Update vacuum tube stamps based on current operating point
+  for (const auto &comp : circuitGraph->getComponents()) {
+    if (comp->getType() == ComponentType::VacuumTube) {
+      auto *tube = static_cast<VacuumTube *>(comp.get());
+
+      int gridNode = nodeToIndex[tube->getNode1()];      // Grid
+      int cathodeNode = nodeToIndex[tube->getNode2()];   // Cathode
+      int plateNode = nodeToIndex[tube->getPlateNode()]; // Plate
+
+      // Get current voltages
+      double vg = gridNode >= 0 ? x[gridNode] : 0.0;
+      double vk = cathodeNode >= 0 ? x[cathodeNode] : 0.0;
+      double vp = plateNode >= 0 ? x[plateNode] : 0.0;
+
+      double vgk = vg - vk;
+      double vpk = vp - vk;
+
+      // Calculate plate current and transconductance
+      double ip, gm, gp;
+      tube->calculateDerivatives(vgk, vpk, ip, gm, gp);
+
+      // Stamp linearized model (Norton equivalent)
+      // Plate current source
+      double ieq = ip - gm * vgk - gp * vpk;
+      stampCurrentSource(plateNode, cathodeNode, ieq);
+
+      // Transconductance (VCCS from grid to plate)
+      stampVCCS(plateNode, cathodeNode, gridNode, cathodeNode, gm);
+
+      // Plate conductance
+      if (plateNode >= 0)
+        G[plateNode][plateNode] += gp;
+      if (cathodeNode >= 0)
+        G[cathodeNode][cathodeNode] += gp;
+      if (plateNode >= 0 && cathodeNode >= 0) {
+        G[plateNode][cathodeNode] -= gp;
+        G[cathodeNode][plateNode] -= gp;
+      }
+    }
+  }
+}
+
+bool MNASolver::luDecompose() {
+  // Copy G to LU
+  LU = G;
+
+  for (int i = 0; i < matrixSize; ++i)
+    pivot[i] = i;
+
+  for (int k = 0; k < matrixSize; ++k) {
+    // Find pivot
+    double maxVal = 0.0;
+    int maxRow = k;
+
+    for (int i = k; i < matrixSize; ++i) {
+      if (std::abs(LU[i][k]) > maxVal) {
+        maxVal = std::abs(LU[i][k]);
+        maxRow = i;
+      }
+    }
+
+    if (maxVal < 1e-12)
+      return false; // Singular matrix
+
+    // Swap rows
+    if (maxRow != k) {
+      std::swap(LU[k], LU[maxRow]);
+      std::swap(pivot[k], pivot[maxRow]);
+    }
+
+    // Elimination
+    for (int i = k + 1; i < matrixSize; ++i) {
+      LU[i][k] /= LU[k][k];
+      for (int j = k + 1; j < matrixSize; ++j) {
+        LU[i][j] -= LU[i][k] * LU[k][j];
+      }
+    }
+  }
+
+  return true;
+}
+
+void MNASolver::luSolve() {
+  // Apply pivot to z
+  std::vector<double> b(matrixSize);
+  for (int i = 0; i < matrixSize; ++i)
+    b[i] = z[pivot[i]];
+
+  // Forward substitution (Ly = b)
+  std::vector<double> y(matrixSize);
+  for (int i = 0; i < matrixSize; ++i) {
+    y[i] = b[i];
+    for (int j = 0; j < i; ++j)
+      y[i] -= LU[i][j] * y[j];
+  }
+
+  // Back substitution (Ux = y)
+  for (int i = matrixSize - 1; i >= 0; --i) {
+    x[i] = y[i];
+    for (int j = i + 1; j < matrixSize; ++j)
+      x[i] -= LU[i][j] * x[j];
+    x[i] /= LU[i][i];
+  }
+}
+
+void MNASolver::step(double inputVoltage) {
+  if (matrixSize == 0 || !circuitGraph)
+    return;
+
+  // Update capacitor companion models
+  int capIndex = 0;
+  for (const auto &comp : circuitGraph->getComponents()) {
+    if (comp->getType() == ComponentType::Capacitor) {
+      auto *c = static_cast<Capacitor *>(comp.get());
+      int n1 = nodeToIndex[comp->getNode1()];
+      int n2 = nodeToIndex[comp->getNode2()];
+
+      double v1 = n1 >= 0 ? x[n1] : 0.0;
+      double v2 = n2 >= 0 ? x[n2] : 0.0;
+      double vCap = v1 - v2;
+
+      double geq = 2.0 * c->getCapacitance() / dt;
+      double ieq = geq * capVoltages[capIndex] + capCurrents[capIndex];
+
+      // Add equivalent current source
+      stampCurrentSource(n1, n2, ieq);
+
+      // Update state
+      capVoltages[capIndex] = vCap;
+      capCurrents[capIndex] = geq * vCap - ieq;
+
+      capIndex++;
+    }
+  }
+
+  // Set input voltage
+  if (inputNodeIndex >= 0 && inputNodeIndex < matrixSize) {
+    z[inputNodeIndex] = inputVoltage;
+  }
+
+  // Solve the system
+  solve();
+}
+
+double MNASolver::getNodeVoltage(int nodeId) const {
+  auto it = nodeToIndex.find(nodeId);
+  if (it == nodeToIndex.end() || it->second < 0)
+    return 0.0;
+
+  if (it->second >= static_cast<int>(x.size()))
+    return 0.0;
+
+  return x[it->second];
+}
+
+double MNASolver::getBranchCurrent(int branchId) const {
+  int index = numNodes + branchId;
+  if (index >= static_cast<int>(x.size()))
+    return 0.0;
+
+  return x[index];
+}
+
+double MNASolver::getOutputVoltage() const {
+  if (outputNodeIndex >= 0 && outputNodeIndex < static_cast<int>(x.size()))
+    return x[outputNodeIndex];
+
+  return 0.0;
+}
+
+void MNASolver::updateComponentValue(int componentId, double value) {
+  if (!circuitGraph)
+    return;
+
+  // Find component and update
+  CircuitComponent *comp =
+      const_cast<CircuitComponent *>(circuitGraph->getComponent(componentId));
+  if (comp) {
+    comp->setValue(value);
+    buildMatrix();
+  }
+}
