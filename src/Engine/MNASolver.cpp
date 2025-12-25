@@ -10,6 +10,16 @@
 #include "Components/VacuumTube.h"
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <set>
+
+// Debug logging to file
+static void logDebug(const juce::String &msg) {
+  static std::ofstream logFile("/tmp/mna_debug.log", std::ios::app);
+  logFile << msg.toStdString() << std::endl;
+  logFile.flush();
+  DBG(msg);
+}
 
 MNASolver::MNASolver() {}
 
@@ -28,33 +38,155 @@ void MNASolver::setSampleRate(double rate) {
     buildMatrix();
 }
 
+void MNASolver::buildNodeEquivalenceClasses() {
+  // Initialize Union-Find: each node is its own parent
+  nodeParent.clear();
+  nodeRank.clear();
+
+  for (const auto &node : circuitGraph->getNodes()) {
+    nodeParent[node.id] = node.id;
+    nodeRank[node.id] = 0;
+  }
+
+  // Also ensure all wire endpoints are in the map (handles edge cases)
+  for (const auto &wire : circuitGraph->getWires()) {
+    if (nodeParent.find(wire.nodeA) == nodeParent.end()) {
+      nodeParent[wire.nodeA] = wire.nodeA;
+      nodeRank[wire.nodeA] = 0;
+    }
+    if (nodeParent.find(wire.nodeB) == nodeParent.end()) {
+      nodeParent[wire.nodeB] = wire.nodeB;
+      nodeRank[wire.nodeB] = 0;
+    }
+  }
+
+  // Also ensure all component nodes are in the map
+  for (const auto &comp : circuitGraph->getComponents()) {
+    for (int nodeId : comp->getAllNodes()) {
+      if (nodeParent.find(nodeId) == nodeParent.end()) {
+        nodeParent[nodeId] = nodeId;
+        nodeRank[nodeId] = 0;
+      }
+    }
+  }
+
+  // Union all nodes connected by wires
+  for (const auto &wire : circuitGraph->getWires()) {
+    unionNodes(wire.nodeA, wire.nodeB);
+  }
+}
+
+int MNASolver::findNodeRepresentative(int nodeId) {
+  // Path compression: make every node point directly to root
+  if (nodeParent.find(nodeId) == nodeParent.end())
+    return nodeId;
+
+  if (nodeParent[nodeId] != nodeId) {
+    nodeParent[nodeId] = findNodeRepresentative(nodeParent[nodeId]);
+  }
+  return nodeParent[nodeId];
+}
+
+void MNASolver::unionNodes(int nodeA, int nodeB) {
+  int rootA = findNodeRepresentative(nodeA);
+  int rootB = findNodeRepresentative(nodeB);
+
+  if (rootA == rootB)
+    return;
+
+  // Union by rank: attach smaller tree under root of larger tree
+  if (nodeRank[rootA] < nodeRank[rootB]) {
+    nodeParent[rootA] = rootB;
+  } else if (nodeRank[rootA] > nodeRank[rootB]) {
+    nodeParent[rootB] = rootA;
+  } else {
+    nodeParent[rootB] = rootA;
+    nodeRank[rootA]++;
+  }
+}
+
 void MNASolver::buildMatrix() {
   if (!circuitGraph)
     return;
 
   const juce::ScopedLock sl(circuitGraph->getLock());
 
-  // Map nodes to matrix indices (ground is not included in matrix)
+  // Reset simulation failed flag when rebuilding matrix
+  simulationFailed = false;
+
+  // Build node equivalence classes from wires (merge connected nodes)
+  buildNodeEquivalenceClasses();
+
+  // Map node representatives to matrix indices (ground is not included)
   nodeToIndex.clear();
+  std::map<int, int> representativeToIndex; // Map unique representatives to indices
   int index = 0;
 
+  // First, find the ground representative
+  int groundNodeId = circuitGraph->getGroundNodeId();
+  int groundRepresentative = findNodeRepresentative(groundNodeId);
+  groundIndex = groundNodeId;
+
+  // Collect all unique node IDs (from nodes list, components, and wires)
+  std::set<int> allNodeIds;
   for (const auto &node : circuitGraph->getNodes()) {
-    if (node.isGround) {
-      groundIndex = node.id;
-      nodeToIndex[node.id] = -1; // Ground has no index
+    allNodeIds.insert(node.id);
+  }
+  for (const auto &comp : circuitGraph->getComponents()) {
+    allNodeIds.insert(comp->getNode1());
+    allNodeIds.insert(comp->getNode2());
+    // Handle components with more than 2 terminals
+    for (int nodeId : comp->getAllNodes()) {
+      allNodeIds.insert(nodeId);
+    }
+  }
+  for (const auto &wire : circuitGraph->getWires()) {
+    allNodeIds.insert(wire.nodeA);
+    allNodeIds.insert(wire.nodeB);
+  }
+
+  // Assign matrix indices to unique node representatives
+  for (int nodeId : allNodeIds) {
+    // Ensure node is in nodeParent map
+    if (nodeParent.find(nodeId) == nodeParent.end()) {
+      nodeParent[nodeId] = nodeId;
+      nodeRank[nodeId] = 0;
+    }
+
+    int rep = findNodeRepresentative(nodeId);
+
+    // Check if this representative is connected to ground
+    if (rep == groundRepresentative) {
+      nodeToIndex[nodeId] = -1; // Ground has no index
+    } else if (representativeToIndex.find(rep) == representativeToIndex.end()) {
+      // New representative, assign an index
+      representativeToIndex[rep] = index;
+      nodeToIndex[nodeId] = index;
+      index++;
     } else {
-      nodeToIndex[node.id] = index++;
+      // Representative already has an index, use it
+      nodeToIndex[nodeId] = representativeToIndex[rep];
     }
   }
 
   numNodes = index;
   outputNodeIndex = -1;
 
-  // Count voltage sources
+  // Count voltage sources (only those that aren't shorted by wire merging)
   numVSources = 0;
   for (const auto &comp : circuitGraph->getComponents()) {
-    if (comp->getType() == ComponentType::AudioInput)
-      numVSources++;
+    if (comp->getType() == ComponentType::AudioInput) {
+      int n1 = nodeToIndex.count(comp->getNode1())
+                   ? nodeToIndex[comp->getNode1()]
+                   : -1;
+      int n2 = nodeToIndex.count(comp->getNode2())
+                   ? nodeToIndex[comp->getNode2()]
+                   : -1;
+
+      if (n1 != n2) {
+        numVSources++;
+      }
+    }
   }
 
   matrixSize = numNodes + numVSources;
@@ -90,24 +222,30 @@ void MNASolver::buildMatrix() {
   int vsourceIndex = numNodes;
 
   for (const auto &comp : circuitGraph->getComponents()) {
-    int n1 = nodeToIndex[comp->getNode1()];
-    int n2 = nodeToIndex[comp->getNode2()];
+    int n1 = nodeToIndex.count(comp->getNode1()) ? nodeToIndex[comp->getNode1()] : -1;
+    int n2 = nodeToIndex.count(comp->getNode2()) ? nodeToIndex[comp->getNode2()] : -1;
 
     switch (comp->getType()) {
     case ComponentType::Resistor: {
       auto *r = static_cast<Resistor *>(comp.get());
-      stampResistorStatic(n1, n2, r->getResistance());
+      // Skip if both terminals merged to same node (shorted by wires)
+      if (n1 != n2) {
+        stampResistorStatic(n1, n2, r->getResistance());
+      }
       break;
     }
     case ComponentType::Capacitor: {
       auto *c = static_cast<Capacitor *>(comp.get());
-      double geq = 2.0 * c->getCapacitance() / dt;
-      stampResistorStatic(n1, n2, 1.0 / geq);
+      // Skip if both terminals merged to same node (shorted by wires)
+      if (n1 != n2) {
+        double geq = 2.0 * c->getCapacitance() / dt;
+        stampResistorStatic(n1, n2, 1.0 / geq);
 
-      // Cache for audio thread
-      cachedCapacitors.push_back({n1, n2, c->getCapacitance(),
-                                  static_cast<int>(cachedCapacitors.size()),
-                                  c});
+        // Cache for audio thread
+        cachedCapacitors.push_back({n1, n2, c->getCapacitance(),
+                                    static_cast<int>(cachedCapacitors.size()),
+                                    c});
+      }
       break;
     }
     case ComponentType::Potentiometer: {
@@ -117,13 +255,14 @@ void MNASolver::buildMatrix() {
       double r1 = totalR * pos;
       double r2 = totalR * (1.0 - pos);
 
-      int n3 = nodeToIndex[p->getNode3()];
+      int n3 = nodeToIndex.count(p->getNode3()) ? nodeToIndex[p->getNode3()] : -1;
 
       r1 = std::max(r1, 0.01);
       r2 = std::max(r2, 0.01);
 
-      stampResistorStatic(n1, n3, r1);
-      stampResistorStatic(n3, n2, r2);
+      // Only stamp if nodes are different
+      if (n1 != n3) stampResistorStatic(n1, n3, r1);
+      if (n3 != n2) stampResistorStatic(n3, n2, r2);
       break;
     }
     case ComponentType::Switch: {
@@ -134,9 +273,18 @@ void MNASolver::buildMatrix() {
     }
     case ComponentType::AudioInput: {
       auto *audioIn = static_cast<AudioInput *>(comp.get());
-      stampVoltageSourceStatic(n1, n2, vsourceIndex, 0.0);
-      cachedAudioInputs.push_back({audioIn, vsourceIndex});
-      vsourceIndex++;
+      // Only stamp voltage source if terminals are different
+      // (not shorted together by wires)
+      if (n1 != n2) {
+        if (vsourceIndex >= matrixSize) {
+          logDebug("ERROR: vsourceIndex " + juce::String(vsourceIndex) +
+                   " >= matrixSize " + juce::String(matrixSize));
+        } else {
+          stampVoltageSourceStatic(n1, n2, vsourceIndex, 0.0);
+          cachedAudioInputs.push_back({audioIn, vsourceIndex});
+          vsourceIndex++;
+        }
+      }
       break;
     }
     case ComponentType::AudioOutput: {
@@ -148,7 +296,7 @@ void MNASolver::buildMatrix() {
       auto *tube = static_cast<VacuumTube *>(comp.get());
       int grid = n1;
       int cathode = n2;
-      int plate = nodeToIndex[tube->getPlateNode()];
+      int plate = nodeToIndex.count(tube->getPlateNode()) ? nodeToIndex[tube->getPlateNode()] : -1;
       cachedNonLinear.push_back({tube, grid, cathode, plate});
       break;
     }
@@ -157,22 +305,21 @@ void MNASolver::buildMatrix() {
     }
   }
 
-  // Stamp wires as very low resistance resistors (approx short circuit)
-  // We use a small non-zero value to avoid singular matrices and numerical
-  // issues
-  constexpr double WIRE_RESISTANCE = 0.001;
+  // Wires are now handled via node merging (Union-Find) - nodes connected by
+  // wires share the same matrix index, making them true short circuits.
+  // No resistance stamping needed for wires.
 
-  for (const auto &wire : circuitGraph->getWires()) {
-    int n1 = nodeToIndex[wire.nodeA];
-    int n2 = nodeToIndex[wire.nodeB];
-    stampResistorStatic(n1, n2, WIRE_RESISTANCE);
-  }
-
-  // Add small shunt conductance to ground for all nodes to prevent singular
-  // matrices
-  constexpr double SHUNT_CONDUCTANCE = 1e-12;
+  // Add shunt conductance to ground for all nodes to prevent singular matrices
+  // and stabilize floating nodes. This acts as a very high resistance (1 GΩ) to ground.
+  constexpr double SHUNT_CONDUCTANCE = 1e-9;
   for (int i = 0; i < numNodes; ++i) {
     G_static[i][i] += SHUNT_CONDUCTANCE;
+  }
+
+  // Also add a small diagonal perturbation to voltage source rows if present
+  // to help with numerical stability
+  for (int i = numNodes; i < matrixSize; ++i) {
+    G_static[i][i] += 1e-12;
   }
 
   // Initial copy to active matrices
@@ -362,11 +509,28 @@ bool MNASolver::luDecompose() {
   // Copy G to LU
   LU = G;
 
+  // Check for obviously problematic matrices
+  for (int i = 0; i < matrixSize; ++i) {
+    bool hasNonZero = false;
+    for (int j = 0; j < matrixSize; ++j) {
+      if (std::abs(LU[i][j]) > 1e-20) {
+        hasNonZero = true;
+        break;
+      }
+    }
+    if (!hasNonZero) {
+      logDebug("ERROR: Row " + juce::String(i) + " is all zeros!");
+      simulationFailed = true;
+      debugPrintMatrix();
+      return false;
+    }
+  }
+
   for (int i = 0; i < matrixSize; ++i)
     pivot[i] = i;
 
   for (int k = 0; k < matrixSize; ++k) {
-    // Find pivot
+    // Find pivot (partial pivoting for numerical stability)
     double maxVal = 0.0;
     int maxRow = k;
 
@@ -377,16 +541,19 @@ bool MNASolver::luDecompose() {
       }
     }
 
-    if (std::abs(LU[k][k]) < 1e-12) {
-      simulationFailed = true;
-      std::fill(x.begin(), x.end(), 0.0);
-      return false; // Singular matrix
-    }
-
-    // Swap rows
+    // Swap rows before checking for singularity
     if (maxRow != k) {
       std::swap(LU[k], LU[maxRow]);
       std::swap(pivot[k], pivot[maxRow]);
+    }
+
+    // Check for singular/near-singular matrix after pivoting
+    if (std::abs(LU[k][k]) < 1e-15) {
+      // Add a small perturbation to make it solvable (regularization)
+      LU[k][k] = 1e-12;
+      simulationFailed = true;
+      logDebug("Singular matrix detected at pivot " + juce::String(k));
+      debugPrintMatrix();
     }
 
     // Elimination
@@ -421,6 +588,12 @@ void MNASolver::luSolve() {
     for (int j = i + 1; j < matrixSize; ++j)
       x[i] -= LU[i][j] * x[j];
     x[i] /= LU[i][i];
+
+    // NaN protection: clamp to reasonable voltage range
+    if (!std::isfinite(x[i])) {
+      x[i] = 0.0;
+      simulationFailed = true;
+    }
   }
 }
 
@@ -529,4 +702,68 @@ void MNASolver::updateComponentValue(int componentId, double value) {
     comp->setValue(value);
     buildMatrix();
   }
+}
+
+void MNASolver::debugPrintMatrix() const {
+  logDebug("=== MNA Matrix Debug ===");
+  logDebug("Matrix size: " + juce::String(matrixSize));
+  logDebug("Num nodes: " + juce::String(numNodes));
+  logDebug("Num voltage sources: " + juce::String(numVSources));
+
+  if (circuitGraph) {
+    logDebug("Circuit Graph Info:");
+    logDebug("  Total nodes in graph: " +
+             juce::String(circuitGraph->getNodeCount()));
+    logDebug("  Total wires: " +
+             juce::String((int)circuitGraph->getWires().size()));
+    logDebug("  Total junctions: " +
+             juce::String((int)circuitGraph->getJunctions().size()));
+    logDebug("  Ground node ID: " +
+             juce::String(circuitGraph->getGroundNodeId()));
+
+    logDebug("  Wires:");
+    for (const auto &wire : circuitGraph->getWires()) {
+      logDebug("    Wire " + juce::String(wire.id) + ": " +
+               juce::String(wire.nodeA) + " -> " + juce::String(wire.nodeB));
+    }
+
+    logDebug("  Components:");
+    for (const auto &comp : circuitGraph->getComponents()) {
+      logDebug("    " + comp->getName() + " (type " +
+               juce::String(static_cast<int>(comp->getType())) + "): nodes " +
+               juce::String(comp->getNode1()) + ", " +
+               juce::String(comp->getNode2()));
+    }
+
+    logDebug("  Junctions:");
+    for (const auto &junc : circuitGraph->getJunctions()) {
+      logDebug("    Junction node " + juce::String(junc.nodeId));
+    }
+  }
+
+  logDebug("Node to index mapping:");
+  for (const auto &[nodeId, idx] : nodeToIndex) {
+    logDebug("  Node " + juce::String(nodeId) + " -> index " +
+             juce::String(idx));
+  }
+
+  if (matrixSize > 0 && matrixSize <= 10) {
+    logDebug("G_static matrix:");
+    for (int i = 0; i < matrixSize; ++i) {
+      juce::String row;
+      for (int j = 0; j < matrixSize; ++j) {
+        row += juce::String(G_static[i][j], 6) + " ";
+      }
+      logDebug("  [" + row + "]");
+    }
+
+    logDebug("z_static vector:");
+    juce::String zStr;
+    for (int i = 0; i < matrixSize; ++i) {
+      zStr += juce::String(z_static[i], 6) + " ";
+    }
+    logDebug("  [" + zStr + "]");
+  }
+
+  logDebug("========================");
 }

@@ -155,11 +155,15 @@ int CircuitGraph::connectNodes(int nodeA, int nodeB) {
 }
 
 void CircuitGraph::removeWire(int wireId) {
-  const juce::ScopedLock sl(graphLock);
-  wires.erase(
-      std::remove_if(wires.begin(), wires.end(),
-                     [wireId](const Wire &w) { return w.id == wireId; }),
-      wires.end());
+  {
+    const juce::ScopedLock sl(graphLock);
+    wires.erase(
+        std::remove_if(wires.begin(), wires.end(),
+                       [wireId](const Wire &w) { return w.id == wireId; }),
+        wires.end());
+  }
+  // Clean up any orphaned junctions after removing the wire
+  cleanupOrphanedJunctions();
 }
 
 Wire *CircuitGraph::getWireById(int wireId) {
@@ -170,11 +174,202 @@ Wire *CircuitGraph::getWireById(int wireId) {
   return nullptr;
 }
 
+int CircuitGraph::createJunctionOnWire(int wireId, juce::Point<float> position) {
+  const juce::ScopedLock sl(graphLock);
+
+  // Find the wire to split
+  Wire *wire = nullptr;
+  int wireIndex = -1;
+  for (size_t i = 0; i < wires.size(); ++i) {
+    if (wires[i].id == wireId) {
+      wire = &wires[i];
+      wireIndex = static_cast<int>(i);
+      break;
+    }
+  }
+
+  if (!wire)
+    return -1;
+
+  // Store original wire endpoints
+  int originalNodeA = wire->nodeA;
+  int originalNodeB = wire->nodeB;
+
+  // Create a new junction node
+  int junctionNodeId = nextNodeId++;
+  juce::String nodeName = "Junction" + juce::String(junctionNodeId);
+  nodes.emplace_back(junctionNodeId, nodeName, false);
+
+  // Record the junction with its position
+  junctions.emplace_back(junctionNodeId, position);
+
+  // Update node position
+  if (auto *node = getNode(junctionNodeId)) {
+    node->position = position;
+  }
+
+  // Remove the original wire
+  wires.erase(wires.begin() + wireIndex);
+
+  // Create two new wires: nodeA -> junction and junction -> nodeB
+  int wire1Id = nextWireId++;
+  int wire2Id = nextWireId++;
+  wires.emplace_back(wire1Id, originalNodeA, junctionNodeId);
+  wires.emplace_back(wire2Id, junctionNodeId, originalNodeB);
+
+  return junctionNodeId;
+}
+
+void CircuitGraph::addJunction(int nodeId, juce::Point<float> position) {
+  const juce::ScopedLock sl(graphLock);
+
+  // Check if junction already exists
+  for (auto &junction : junctions) {
+    if (junction.nodeId == nodeId) {
+      junction.position = position;
+      return;
+    }
+  }
+
+  junctions.emplace_back(nodeId, position);
+}
+
+Junction *CircuitGraph::getJunctionByNode(int nodeId) {
+  for (auto &junction : junctions) {
+    if (junction.nodeId == nodeId)
+      return &junction;
+  }
+  return nullptr;
+}
+
+bool CircuitGraph::isJunctionNode(int nodeId) const {
+  for (const auto &junction : junctions) {
+    if (junction.nodeId == nodeId)
+      return true;
+  }
+  return false;
+}
+
+int CircuitGraph::countWiresConnectedToNode(int nodeId) const {
+  int count = 0;
+  for (const auto &wire : wires) {
+    if (wire.nodeA == nodeId || wire.nodeB == nodeId)
+      count++;
+  }
+  return count;
+}
+
+void CircuitGraph::cleanupOrphanedJunctions() {
+  const juce::ScopedLock sl(graphLock);
+
+  bool changed = true;
+
+  // Keep cleaning until no more changes (handles cascading cleanup)
+  while (changed) {
+    changed = false;
+
+    // Find ONE junction to clean up
+    for (auto it = junctions.begin(); it != junctions.end(); ++it) {
+      int junctionNodeId = it->nodeId;
+      int wireCount = countWiresConnectedToNode(junctionNodeId);
+
+      if (wireCount == 0) {
+        // Orphaned junction - remove it
+        // Remove from nodes list
+        nodes.erase(std::remove_if(nodes.begin(), nodes.end(),
+                                   [junctionNodeId](const Node &n) {
+                                     return n.id == junctionNodeId;
+                                   }),
+                    nodes.end());
+        // Remove from junctions list
+        junctions.erase(it);
+        changed = true;
+        break; // Restart iteration
+      } else if (wireCount == 1) {
+        // Junction with only one wire - it's a dead end
+        // Find and remove the single wire connected to this junction
+        wires.erase(std::remove_if(wires.begin(), wires.end(),
+                                   [junctionNodeId](const Wire &w) {
+                                     return w.nodeA == junctionNodeId ||
+                                            w.nodeB == junctionNodeId;
+                                   }),
+                    wires.end());
+        // Remove from nodes list
+        nodes.erase(std::remove_if(nodes.begin(), nodes.end(),
+                                   [junctionNodeId](const Node &n) {
+                                     return n.id == junctionNodeId;
+                                   }),
+                    nodes.end());
+        // Remove from junctions list
+        junctions.erase(it);
+        changed = true;
+        break; // Restart iteration
+      } else if (wireCount == 2) {
+        // Junction with exactly 2 wires - merge them back into one wire
+        // Find the two wires
+        std::vector<std::pair<int, int>> wireInfo; // (wireId, otherEndpoint)
+        for (const auto &wire : wires) {
+          if (wire.nodeA == junctionNodeId) {
+            wireInfo.push_back({wire.id, wire.nodeB});
+          } else if (wire.nodeB == junctionNodeId) {
+            wireInfo.push_back({wire.id, wire.nodeA});
+          }
+        }
+
+        if (wireInfo.size() == 2) {
+          int wire1Id = wireInfo[0].first;
+          int wire2Id = wireInfo[1].first;
+          int endpoint1 = wireInfo[0].second;
+          int endpoint2 = wireInfo[1].second;
+
+          // Remove the two wires
+          wires.erase(std::remove_if(wires.begin(), wires.end(),
+                                     [wire1Id, wire2Id](const Wire &w) {
+                                       return w.id == wire1Id ||
+                                              w.id == wire2Id;
+                                     }),
+                      wires.end());
+
+          // Create a single wire connecting the two endpoints
+          // (only if they're different and wire doesn't already exist)
+          if (endpoint1 != endpoint2) {
+            bool wireExists = false;
+            for (const auto &wire : wires) {
+              if ((wire.nodeA == endpoint1 && wire.nodeB == endpoint2) ||
+                  (wire.nodeA == endpoint2 && wire.nodeB == endpoint1)) {
+                wireExists = true;
+                break;
+              }
+            }
+            if (!wireExists) {
+              int newWireId = nextWireId++;
+              wires.emplace_back(newWireId, endpoint1, endpoint2);
+            }
+          }
+
+          // Remove from nodes list
+          nodes.erase(std::remove_if(nodes.begin(), nodes.end(),
+                                     [junctionNodeId](const Node &n) {
+                                       return n.id == junctionNodeId;
+                                     }),
+                      nodes.end());
+          // Remove from junctions list
+          junctions.erase(it);
+          changed = true;
+          break; // Restart iteration
+        }
+      }
+      // If wireCount >= 3, the junction is still needed
+    }
+  }
+}
+
 void CircuitGraph::clear() {
   const juce::ScopedLock sl(graphLock);
   nodes.clear();
   components.clear();
   wires.clear();
+  junctions.clear();
   nextNodeId = 0;
   nextComponentId = 0;
   nextWireId = 0;

@@ -123,3 +123,56 @@ bool WireView::hitTest(juce::Point<float> canvasPos, float zoom) const {
 
   return false;
 }
+
+juce::Point<float>
+WireView::getClosestPointOnWire(juce::Point<float> canvasPos) const {
+  // Calculate midpoint for orthogonal routing
+  float midX = (startPosition.x + endPosition.x) / 2.0f;
+
+  // Build segment list
+  std::vector<std::pair<juce::Point<float>, juce::Point<float>>> segments;
+
+  if (std::abs(startPosition.y - endPosition.y) < 5.0f ||
+      std::abs(startPosition.x - endPosition.x) < 5.0f) {
+    // Straight line
+    segments.push_back({startPosition, endPosition});
+  } else {
+    // Orthogonal segments
+    segments.push_back({startPosition, {midX, startPosition.y}});
+    segments.push_back({{midX, startPosition.y}, {midX, endPosition.y}});
+    segments.push_back({{midX, endPosition.y}, endPosition});
+  }
+
+  juce::Point<float> closestPoint = startPosition;
+  float minDistance = std::numeric_limits<float>::max();
+
+  for (const auto &segment : segments) {
+    auto &p1 = segment.first;
+    auto &p2 = segment.second;
+
+    float dx = p2.x - p1.x;
+    float dy = p2.y - p1.y;
+    float lengthSq = dx * dx + dy * dy;
+
+    juce::Point<float> projection;
+
+    if (lengthSq == 0.0f) {
+      // Segment is a point
+      projection = p1;
+    } else {
+      // Calculate projection parameter t, clamped to [0, 1]
+      float t = std::max(0.0f, std::min(1.0f, ((canvasPos.x - p1.x) * dx +
+                                               (canvasPos.y - p1.y) * dy) /
+                                                  lengthSq));
+      projection = juce::Point<float>(p1.x + t * dx, p1.y + t * dy);
+    }
+
+    float distance = canvasPos.getDistanceFrom(projection);
+    if (distance < minDistance) {
+      minDistance = distance;
+      closestPoint = projection;
+    }
+  }
+
+  return closestPoint;
+}

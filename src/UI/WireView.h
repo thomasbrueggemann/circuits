@@ -29,6 +29,10 @@ public:
   // Hit testing
   bool hitTest(juce::Point<float> canvasPos, float zoom) const;
 
+  // Find closest point on wire for junction creation
+  // Returns the closest point on the wire path to the given position
+  juce::Point<float> getClosestPointOnWire(juce::Point<float> canvasPos) const;
+
   // Signal visualization
   void setSignalLevel(float level) { signalLevel = level; }
   float getSignalLevel() const { return signalLevel; }

@@ -39,7 +39,7 @@ private:
   // Waveform data
   std::vector<float> waveformBuffer;
   size_t writeIndex = 0;
-  static constexpr size_t BUFFER_SIZE = 8192;
+  static constexpr size_t BUFFER_SIZE = 2048; // ~46ms at 44.1kHz for visible waveform cycles
 
   // Display state
   bool probeActive = false;

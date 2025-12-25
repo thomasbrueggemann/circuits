@@ -39,6 +39,9 @@ public:
   double getOutputVoltage() const;
   bool isSimulationFailed() const { return simulationFailed; }
 
+  // Debug
+  void debugPrintMatrix() const;
+
   // Component value updates (for real-time control)
   void updateComponentValue(int componentId, double value);
 
@@ -85,8 +88,17 @@ private:
   bool luDecompose();
   void luSolve();
 
+  // Node merging (Union-Find) for wire connections
+  void buildNodeEquivalenceClasses();
+  int findNodeRepresentative(int nodeId);
+  void unionNodes(int nodeA, int nodeB);
+
   // Circuit reference
   const CircuitGraph *circuitGraph = nullptr;
+
+  // Union-Find parent map for node equivalence classes
+  std::map<int, int> nodeParent;
+  std::map<int, int> nodeRank;
 
   // Cached lists for audio thread
   std::vector<CachedCapacitor> cachedCapacitors;

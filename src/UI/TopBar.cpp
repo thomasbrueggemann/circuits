@@ -40,8 +40,6 @@ TopBar::TopBar(CircuitGraph &graph, CircuitEngine &engine)
   signalSourceSelector = std::make_unique<juce::ComboBox>();
   signalSourceSelector->addItem("DAW Input", 1);
   signalSourceSelector->addItem("Sine Wave", 2);
-  signalSourceSelector->addItem("Square Wave", 3);
-  signalSourceSelector->addItem("White Noise", 4);
   signalSourceSelector->onChange = [this]() {
     if (auto *input = getFirstInput()) {
       input->setSource(

@@ -60,6 +60,17 @@ juce::String CircuitSerializer::serialize(const CircuitGraph &graph) {
   }
   root->setProperty("wires", wiresArray);
 
+  // Serialize junctions
+  juce::Array<juce::var> junctionsArray;
+  for (const auto &junction : graph.getJunctions()) {
+    juce::DynamicObject::Ptr junctionObj = new juce::DynamicObject();
+    junctionObj->setProperty("nodeId", junction.nodeId);
+    junctionObj->setProperty("posX", junction.position.x);
+    junctionObj->setProperty("posY", junction.position.y);
+    junctionsArray.add(juce::var(junctionObj.get()));
+  }
+  root->setProperty("junctions", junctionsArray);
+
   return juce::JSON::toString(juce::var(root.get()));
 }
 
@@ -160,6 +171,18 @@ bool CircuitSerializer::deserialize(const juce::String &json,
         int nodeA = wireObj->getProperty("nodeA");
         int nodeB = wireObj->getProperty("nodeB");
         graph.connectNodes(nodeA, nodeB);
+      }
+    }
+  }
+
+  // Deserialize junctions
+  if (auto *junctionsArray = root->getProperty("junctions").getArray()) {
+    for (const auto &junctionVar : *junctionsArray) {
+      if (auto *junctionObj = junctionVar.getDynamicObject()) {
+        int nodeId = junctionObj->getProperty("nodeId");
+        float posX = junctionObj->getProperty("posX");
+        float posY = junctionObj->getProperty("posY");
+        graph.addJunction(nodeId, juce::Point<float>(posX, posY));
       }
     }
   }

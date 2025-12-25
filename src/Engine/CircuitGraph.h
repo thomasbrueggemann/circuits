@@ -39,6 +39,14 @@ struct Wire {
   Wire(int id_, int a, int b) : id(id_), nodeA(a), nodeB(b) {}
 };
 
+struct Junction {
+  int nodeId = -1;
+  juce::Point<float> position;
+
+  Junction() = default;
+  Junction(int node, juce::Point<float> pos) : nodeId(node), position(pos) {}
+};
+
 class CircuitGraph {
 public:
   CircuitGraph();
@@ -70,6 +78,15 @@ public:
   const std::vector<Wire> &getWires() const { return wires; }
   Wire *getWireById(int wireId);
 
+  // Junction management (wire-to-wire connections)
+  int createJunctionOnWire(int wireId, juce::Point<float> position);
+  void addJunction(int nodeId, juce::Point<float> position);
+  const std::vector<Junction> &getJunctions() const { return junctions; }
+  Junction *getJunctionByNode(int nodeId);
+  bool isJunctionNode(int nodeId) const;
+  void cleanupOrphanedJunctions();
+  int countWiresConnectedToNode(int nodeId) const;
+
   // Utility
   void clear();
   bool isValid() const;
@@ -84,6 +101,7 @@ private:
   std::vector<Node> nodes;
   std::vector<std::unique_ptr<CircuitComponent>> components;
   std::vector<Wire> wires;
+  std::vector<Junction> junctions;
 
   int nextNodeId = 0;
   int nextComponentId = 0;

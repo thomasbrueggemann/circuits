@@ -26,6 +26,7 @@ void CircuitDesigner::paint(juce::Graphics &g) {
 
   drawGrid(g);
   drawWires(g);
+  drawJunctions(g);
   drawComponents(g);
   drawConnectionPoints(g);
 
@@ -169,6 +170,24 @@ void CircuitDesigner::drawConnectionPoints(juce::Graphics &g) {
       }
     }
   }
+
+  // When drawing a wire, show potential junction point on existing wires
+  if (isDrawingWire) {
+    auto canvasPos = screenToCanvas(mousePos);
+    auto [targetWire, junctionPos] = findWireJunctionAt(canvasPos);
+    if (targetWire) {
+      auto screenJunctionPos = canvasToScreen(junctionPos);
+      // Draw junction preview
+      g.setColour(juce::Colour(0xFF00ff88).withAlpha(0.8f));
+      g.fillEllipse(screenJunctionPos.x - 8 * zoomLevel,
+                    screenJunctionPos.y - 8 * zoomLevel, 16 * zoomLevel,
+                    16 * zoomLevel);
+      g.setColour(juce::Colours::white);
+      g.drawEllipse(screenJunctionPos.x - 8 * zoomLevel,
+                    screenJunctionPos.y - 8 * zoomLevel, 16 * zoomLevel,
+                    16 * zoomLevel, 2.0f);
+    }
+  }
 }
 
 void CircuitDesigner::mouseDown(const juce::MouseEvent &e) {
@@ -242,11 +261,31 @@ void CircuitDesigner::mouseDown(const juce::MouseEvent &e) {
     return;
   }
 
+  // Check if we're finishing a wire on another wire (creating a junction)
+  if (isDrawingWire) {
+    auto [targetWire, junctionPos] = findWireJunctionAt(canvasPos);
+    if (targetWire) {
+      finishWireOnWire(targetWire, junctionPos);
+      return;
+    }
+  }
+
   // Always start a wire if connected to a node, even if inside a component
   if (clickedNode >= 0) {
     startWire(clickedNode, canvasPos);
     grabKeyboardFocus();
     return;
+  }
+
+  // Check if we can start a wire from an existing junction
+  for (const auto &junction : circuitGraph.getJunctions()) {
+    auto screenJunctionPos = canvasToScreen(junction.position);
+    auto screenMousePos = canvasToScreen(canvasPos);
+    if (screenJunctionPos.getDistanceFrom(screenMousePos) < 15.0f) {
+      startWire(junction.nodeId, junction.position);
+      grabKeyboardFocus();
+      return;
+    }
   }
 
   // Check if clicking on a component body first (for selection/dragging)
@@ -331,6 +370,24 @@ void CircuitDesigner::mouseDrag(const juce::MouseEvent &e) {
       }
     }
 
+    // Check for snapping to existing junctions
+    for (const auto &junction : circuitGraph.getJunctions()) {
+      auto screenJunctionPos = canvasToScreen(junction.position);
+      if (e.position.getDistanceFrom(screenJunctionPos) < 15.0f) {
+        wireEndPoint = junction.position;
+        repaint();
+        return;
+      }
+    }
+
+    // Check for snapping to wire (potential junction point)
+    auto [targetWire, junctionPos] = findWireJunctionAt(canvasPos);
+    if (targetWire) {
+      wireEndPoint = junctionPos;
+      repaint();
+      return;
+    }
+
     wireEndPoint = canvasPos;
     repaint();
     return;
@@ -363,6 +420,24 @@ void CircuitDesigner::mouseUp(const juce::MouseEvent &e) {
     if (endNode >= 0 && endNode != wireStartNode) {
       finishWire(endNode);
     } else {
+      // Check if we can connect to an existing junction
+      for (const auto &junction : circuitGraph.getJunctions()) {
+        auto screenJunctionPos = canvasToScreen(junction.position);
+        if (e.position.getDistanceFrom(screenJunctionPos) < 15.0f) {
+          if (junction.nodeId != wireStartNode) {
+            finishWire(junction.nodeId);
+          }
+          return;
+        }
+      }
+
+      // Check if releasing on a wire (create junction)
+      auto [targetWire, junctionPos] = findWireJunctionAt(canvasPos);
+      if (targetWire) {
+        finishWireOnWire(targetWire, junctionPos);
+        return;
+      }
+
       // Do nothing if we release on the start node or empty space
       // This allows the "click-move-click" workflow
       // We only cancel if explicitly clicking empty space in mouseDown or Right
@@ -389,9 +464,30 @@ void CircuitDesigner::mouseMove(const juce::MouseEvent &e) {
       }
     }
 
+    // Check for snapping to existing junctions
+    for (const auto &junction : circuitGraph.getJunctions()) {
+      auto screenJunctionPos = canvasToScreen(junction.position);
+      if (e.position.getDistanceFrom(screenJunctionPos) < 15.0f) {
+        wireEndPoint = junction.position;
+        repaint();
+        return;
+      }
+    }
+
+    // Check for snapping to wire (potential junction point)
+    auto [targetWire, junctionPos] = findWireJunctionAt(canvasPos);
+    if (targetWire) {
+      wireEndPoint = junctionPos;
+      repaint();
+      return;
+    }
+
     wireEndPoint = canvasPos;
     repaint();
   }
+
+  // Always repaint to update connection point highlights
+  repaint();
 }
 
 void CircuitDesigner::mouseDoubleClick(const juce::MouseEvent &e) {
@@ -751,6 +847,68 @@ WireView *CircuitDesigner::findWireAt(juce::Point<float> canvasPos) {
   return nullptr;
 }
 
+std::pair<WireView *, juce::Point<float>>
+CircuitDesigner::findWireJunctionAt(juce::Point<float> canvasPos) {
+  float tolerance = 15.0f / zoomLevel; // Screen pixels converted to canvas
+
+  for (auto &wire : wireViews) {
+    if (wire->hitTest(canvasPos, zoomLevel)) {
+      auto closestPoint = wire->getClosestPointOnWire(canvasPos);
+
+      // Don't create junction too close to existing endpoints
+      float distToStart = closestPoint.getDistanceFrom(wire->getStartPosition());
+      float distToEnd = closestPoint.getDistanceFrom(wire->getEndPosition());
+
+      if (distToStart > tolerance && distToEnd > tolerance) {
+        return {wire.get(), closestPoint};
+      }
+    }
+  }
+
+  return {nullptr, {}};
+}
+
+void CircuitDesigner::finishWireOnWire(WireView *targetWire,
+                                       juce::Point<float> junctionPos) {
+  if (!targetWire || wireStartNode < 0)
+    return;
+
+  // Create junction on the target wire
+  int junctionNode =
+      circuitGraph.createJunctionOnWire(targetWire->getId(), junctionPos);
+
+  if (junctionNode >= 0) {
+    // Connect the new wire from start node to junction
+    circuitGraph.connectNodes(wireStartNode, junctionNode);
+    rebuildViews();
+
+    if (onCircuitChanged)
+      onCircuitChanged();
+  }
+
+  cancelWire();
+}
+
+void CircuitDesigner::drawJunctions(juce::Graphics &g) {
+  // Draw junction dots where wires connect
+  for (const auto &junction : circuitGraph.getJunctions()) {
+    auto screenPos = canvasToScreen(junction.position);
+
+    // Junction dot with glow effect
+    g.setColour(juce::Colour(0xFF00ff88).withAlpha(0.3f));
+    g.fillEllipse(screenPos.x - 8 * zoomLevel, screenPos.y - 8 * zoomLevel,
+                  16 * zoomLevel, 16 * zoomLevel);
+
+    g.setColour(juce::Colour(0xFF00ddff));
+    g.fillEllipse(screenPos.x - 5 * zoomLevel, screenPos.y - 5 * zoomLevel,
+                  10 * zoomLevel, 10 * zoomLevel);
+
+    g.setColour(juce::Colours::white);
+    g.fillEllipse(screenPos.x - 2 * zoomLevel, screenPos.y - 2 * zoomLevel,
+                  4 * zoomLevel, 4 * zoomLevel);
+  }
+}
+
 void CircuitDesigner::updateWirePositionsForComponent(ComponentView *view) {
   if (!view)
     return;
@@ -812,6 +970,7 @@ void CircuitDesigner::rebuildViews() {
     juce::Point<float> startPos, endPos;
     bool foundStart = false, foundEnd = false;
 
+    // First check component terminals
     for (auto &view : componentViews) {
       auto terminals = view->getTerminalPositions();
       for (auto &[nodeId, pos] : terminals) {
@@ -823,6 +982,18 @@ void CircuitDesigner::rebuildViews() {
           endPos = pos;
           foundEnd = true;
         }
+      }
+    }
+
+    // Then check junction positions
+    for (const auto &junction : circuitGraph.getJunctions()) {
+      if (junction.nodeId == wire.nodeA) {
+        startPos = junction.position;
+        foundStart = true;
+      }
+      if (junction.nodeId == wire.nodeB) {
+        endPos = junction.position;
+        foundEnd = true;
       }
     }
 

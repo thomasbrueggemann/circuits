@@ -12,7 +12,7 @@
  *
  * The voltage is set by the audio processor for each sample.
  */
-enum class SignalSource { DAW, Sine, Square, Noise };
+enum class SignalSource { DAW, Sine };
 
 class AudioInput : public CircuitComponent {
 public:
@@ -49,11 +49,6 @@ public:
     if (source == SignalSource::Sine) {
       voltage = amplitude * std::sin(phase);
       phase += 2.0 * juce::MathConstants<double>::pi * frequency / sampleRate;
-    } else if (source == SignalSource::Square) {
-      voltage = std::sin(phase) >= 0 ? amplitude : -amplitude;
-      phase += 2.0 * juce::MathConstants<double>::pi * frequency / sampleRate;
-    } else if (source == SignalSource::Noise) {
-      voltage = (random.nextFloat() * 2.0f - 1.0f) * amplitude;
     }
 
     if (phase >= 2.0 * juce::MathConstants<double>::pi)
@@ -72,5 +67,4 @@ private:
   double frequency = 440.0;
   double amplitude = 1.0;
   double phase = 0.0;
-  juce::Random random;
 };

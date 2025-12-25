@@ -114,9 +114,15 @@ private:
   // Wire management
   void startWire(int startNode, juce::Point<float> startPos);
   void finishWire(int endNode);
+  void finishWireOnWire(WireView *targetWire, juce::Point<float> junctionPos);
   void cancelWire();
   WireView *findWireAt(juce::Point<float> canvasPos);
   void updateWirePositionsForComponent(ComponentView *view);
+
+  // Junction management
+  std::pair<WireView *, juce::Point<float>>
+  findWireJunctionAt(juce::Point<float> canvasPos);
+  void drawJunctions(juce::Graphics &g);
 
   // Rebuild views from graph
   void rebuildViews();
