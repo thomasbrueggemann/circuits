@@ -39,6 +39,9 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
     auto &graph = audioProcessor.getCircuitGraph();
     engine.setCircuit(graph);
 
+    // Auto-start simulation when circuit changes
+    engine.setSimulationActive(true);
+    
     autoProbe();
   };
 
@@ -104,6 +107,9 @@ void CircuitsAudioProcessorEditor::resized() {
 }
 
 void CircuitsAudioProcessorEditor::timerCallback() {
+  // Update sample rate for accurate FFT frequency display
+  oscilloscopeView->setSampleRate(audioProcessor.getCurrentSampleRate());
+  
   // Update simulation state display
   oscilloscopeView->setSimulationRunning(
       audioProcessor.getCircuitEngine().isSimulationActive());
@@ -113,9 +119,11 @@ void CircuitsAudioProcessorEditor::timerCallback() {
   oscilloscopeView->setSimulationValid(isValid);
 
   int nodeCount = audioProcessor.getCircuitGraph().getNodeCount();
-  oscilloscopeView->setNodeInfo(audioProcessor.getProbeNodeId(), nodeCount);
+  int probeNodeId = audioProcessor.getProbeNodeId();
+  oscilloscopeView->setNodeInfo(probeNodeId, nodeCount);
 
-  if (nodeCount > 0) {
+  // Only update waveform if we have a valid probe node
+  if (probeNodeId >= 0 && nodeCount > 0) {
     std::vector<float> samples;
     audioProcessor.getLatestSamples(samples);
     oscilloscopeView->updateWaveform(samples);

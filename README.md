@@ -7,7 +7,7 @@ A JUCE-based VST3/AU plugin for real-time analog circuit modeling with a visual 
 ## Features
 
 - **Drag-and-drop circuit designer** - Place components on an infinite canvas
-- **Real-time simulation** - Modified Nodal Analysis (MNA) with Newton-Raphson for nonlinear components
+- **Real-time simulation** - Wave Digital Filters (WDF) for guaranteed stability and efficiency
 - **Component library**:
   - Resistors with adjustable values
   - Capacitors with adjustable values
@@ -101,22 +101,35 @@ Example circuits are provided in the `examples/` folder:
 
 ### Circuit Simulation
 
-The plugin uses **Modified Nodal Analysis (MNA)** to solve circuit equations:
+The plugin uses **Wave Digital Filters (WDF)** for circuit simulation. WDF is a physically-motivated approach that models circuits using wave variables instead of voltages and currents.
 
+Key advantages of WDF:
+- **Guaranteed stability** for linear circuits (passive components)
+- **No matrix inversion** required - efficient real-time processing
+- **Natural handling** of reactive elements (capacitors, inductors)
+- **Bilinear transform** discretization matches analog frequency response
+- **Local nonlinear solving** at root elements
+
+### WDF Theory
+
+Each circuit element is represented as a port with:
+- Incident wave `a` (coming into the element)
+- Reflected wave `b` (going out of the element)
+- Port resistance `R` (characteristic impedance)
+
+Wave relationships:
 ```
-Gx = z
-
-Where:
-G = conductance matrix (stamped by each component)
-x = solution vector (node voltages + branch currents)
-z = right-hand side vector (sources)
+v = a + b           (voltage at port)
+i = (a - b) / R     (current through port)
 ```
 
-For nonlinear components (vacuum tubes), we use **Newton-Raphson iteration** to find the operating point.
+Circuit topology is built using adaptors:
+- **Series adaptor**: Connects elements in series (same current)
+- **Parallel adaptor**: Connects elements in parallel (same voltage)
 
-### Vacuum Tube Model
+### Nonlinear Elements
 
-Triodes are modeled using Koren equations:
+Nonlinear components (vacuum tubes, diodes) are handled at the WDF tree root using **Newton-Raphson iteration**. The triode model uses Koren equations:
 
 ```cpp
 E1 = (vp / kp) * log(1 + exp(kp * (1/mu + vg / sqrt(kvb + vp*vp))))
@@ -125,9 +138,10 @@ Ip = (E1 > 0) ? pow(E1, ex) / kg1 : 0
 
 ### Performance
 
-- 2x oversampling for numerical stability
+- 2x oversampling for improved frequency response
 - DC blocking filter on output
 - Soft clipping for safe output levels
+- Sample-rate adaptive component values
 
 ## Project Structure
 
@@ -143,7 +157,11 @@ circuits/
 │   ├── Engine/
 │   │   ├── CircuitEngine.*  # High-level simulation
 │   │   ├── CircuitGraph.*   # Circuit topology
-│   │   ├── MNASolver.*      # MNA implementation
+│   │   ├── WDF/             # Wave Digital Filter engine
+│   │   │   ├── WDFCore.h        # Base classes and basic elements
+│   │   │   ├── WDFNonlinear.h   # Nonlinear elements (diodes, tubes)
+│   │   │   ├── WDFRTypeAdaptor.h # Multi-port adaptors
+│   │   │   └── WDFEngine.*      # WDF tree builder and processor
 │   │   └── Components/      # Component models
 │   └── UI/
 │       ├── CircuitDesigner.*    # Canvas
@@ -167,8 +185,15 @@ Contributions welcome! Please open an issue or pull request.
 
 - [ ] Additional tube types (pentodes, power tubes)
 - [ ] Transformers
-- [ ] Inductors
-- [ ] Diode clipping stages
+- [x] Inductors (WDF model implemented)
+- [x] Diode clipping stages (WDF nonlinear model)
 - [ ] SPICE netlist import
 - [ ] Circuit library/presets browser
 - [ ] Frequency response analyzer
+- [ ] R-type adaptors for complex topologies
+
+## References
+
+- Fettweis, A. (1986). "Wave digital filters: Theory and practice"
+- Werner, K. J. (2016). "Virtual Analog Modeling of Audio Circuitry Using Wave Digital Filters"
+- Koren, N. (1996). "Improved vacuum-tube models for SPICE simulations"

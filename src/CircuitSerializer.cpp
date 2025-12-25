@@ -2,8 +2,13 @@
 #include "Engine/Components/AudioInput.h"
 #include "Engine/Components/AudioOutput.h"
 #include "Engine/Components/Capacitor.h"
+#include "Engine/Components/Diode.h"
+#include "Engine/Components/DiodePair.h"
+#include "Engine/Components/Ground.h"
+#include "Engine/Components/Inductor.h"
 #include "Engine/Components/Potentiometer.h"
 #include "Engine/Components/Resistor.h"
+#include "Engine/Components/SoftClipper.h"
 #include "Engine/Components/Switch.h"
 #include "Engine/Components/VacuumTube.h"
 
@@ -43,6 +48,18 @@ juce::String CircuitSerializer::serialize(const CircuitGraph &graph) {
     } else if (auto *tube = dynamic_cast<VacuumTube *>(comp.get())) {
       compObj->setProperty("node3", tube->getPlateNode());
       compObj->setProperty("mu", tube->getMu());
+    } else if (auto *diode = dynamic_cast<Diode *>(comp.get())) {
+      compObj->setProperty("diodeType", static_cast<int>(diode->getDiodeType()));
+      compObj->setProperty("saturationCurrent", diode->getSaturationCurrent());
+      compObj->setProperty("emissionCoefficient", diode->getEmissionCoefficient());
+    } else if (auto *diodePair = dynamic_cast<DiodePair *>(comp.get())) {
+      compObj->setProperty("pairType", static_cast<int>(diodePair->getPairType()));
+      compObj->setProperty("saturationCurrent", diodePair->getSaturationCurrent());
+      compObj->setProperty("emissionCoefficient", diodePair->getEmissionCoefficient());
+    } else if (auto *clipper = dynamic_cast<SoftClipper *>(comp.get())) {
+      compObj->setProperty("clipperType", static_cast<int>(clipper->getClipperType()));
+      compObj->setProperty("saturationVoltage", clipper->getSaturationVoltage());
+      compObj->setProperty("driveGain", clipper->getDriveGain());
     }
 
     componentsArray.add(juce::var(compObj.get()));
@@ -121,6 +138,9 @@ bool CircuitSerializer::deserialize(const juce::String &json,
         case ComponentType::Capacitor:
           comp = std::make_unique<Capacitor>(id, name, node1, node2, value);
           break;
+        case ComponentType::Inductor:
+          comp = std::make_unique<Inductor>(id, name, node1, node2, value);
+          break;
         case ComponentType::Potentiometer: {
           int node3 = compObj->getProperty("node3");
           double position = compObj->getProperty("position");
@@ -137,6 +157,51 @@ bool CircuitSerializer::deserialize(const juce::String &json,
           comp = std::move(sw);
           break;
         }
+        case ComponentType::Diode: {
+          auto diode = std::make_unique<Diode>(id, name, node1, node2);
+          if (compObj->hasProperty("diodeType")) {
+            diode->setDiodeType(static_cast<Diode::DiodeType>(
+                static_cast<int>(compObj->getProperty("diodeType"))));
+          }
+          if (compObj->hasProperty("saturationCurrent")) {
+            diode->setSaturationCurrent(compObj->getProperty("saturationCurrent"));
+          }
+          if (compObj->hasProperty("emissionCoefficient")) {
+            diode->setEmissionCoefficient(compObj->getProperty("emissionCoefficient"));
+          }
+          comp = std::move(diode);
+          break;
+        }
+        case ComponentType::DiodePair: {
+          auto diodePair = std::make_unique<DiodePair>(id, name, node1, node2);
+          if (compObj->hasProperty("pairType")) {
+            diodePair->setPairType(static_cast<DiodePair::PairType>(
+                static_cast<int>(compObj->getProperty("pairType"))));
+          }
+          if (compObj->hasProperty("saturationCurrent")) {
+            diodePair->setSaturationCurrent(compObj->getProperty("saturationCurrent"));
+          }
+          if (compObj->hasProperty("emissionCoefficient")) {
+            diodePair->setEmissionCoefficient(compObj->getProperty("emissionCoefficient"));
+          }
+          comp = std::move(diodePair);
+          break;
+        }
+        case ComponentType::SoftClipper: {
+          auto clipper = std::make_unique<SoftClipper>(id, name, node1, node2);
+          if (compObj->hasProperty("clipperType")) {
+            clipper->setClipperType(static_cast<SoftClipper::ClipperType>(
+                static_cast<int>(compObj->getProperty("clipperType"))));
+          }
+          if (compObj->hasProperty("saturationVoltage")) {
+            clipper->setSaturationVoltage(compObj->getProperty("saturationVoltage"));
+          }
+          if (compObj->hasProperty("driveGain")) {
+            clipper->setDriveGain(compObj->getProperty("driveGain"));
+          }
+          comp = std::move(clipper);
+          break;
+        }
         case ComponentType::VacuumTube: {
           int node3 = compObj->getProperty("node3");
           double mu = compObj->getProperty("mu");
@@ -151,6 +216,9 @@ bool CircuitSerializer::deserialize(const juce::String &json,
           break;
         case ComponentType::AudioOutput:
           comp = std::make_unique<AudioOutput>(id, name, node1, node2);
+          break;
+        case ComponentType::Ground:
+          comp = std::make_unique<Ground>(id, name, node1);
           break;
         default:
           continue;

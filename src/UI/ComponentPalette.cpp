@@ -74,6 +74,20 @@ void ComponentPalette::PaletteItem::drawSymbol(juce::Graphics &g,
                2.0f);
     break;
   }
+  case ComponentType::Inductor: {
+    // Coil inductor symbol
+    juce::Path path;
+    path.startNewSubPath(cx - w / 2, cy);
+    float coilW = w / 5;
+    for (int i = 0; i < 4; i++) {
+      float startX = cx - w / 2 + coilW * 0.5f + i * coilW;
+      path.addCentredArc(startX, cy, coilW / 2, h / 3, 0, 
+                         juce::MathConstants<float>::pi, 0, false);
+    }
+    path.lineTo(cx + w / 2, cy);
+    g.strokePath(path, juce::PathStrokeType(2.0f));
+    break;
+  }
   case ComponentType::Potentiometer: {
     // Resistor with arrow
     juce::Path path;
@@ -100,6 +114,67 @@ void ComponentPalette::PaletteItem::drawSymbol(juce::Graphics &g,
     g.fillEllipse(cx - w / 6 - 3, cy - 3, 6, 6);
     g.fillEllipse(cx + w / 6 - 3, cy - 3, 6, 6);
     g.drawLine(cx - w / 6, cy, cx + w / 8, cy - h / 2, 2.0f);
+    break;
+  }
+  case ComponentType::Diode: {
+    // Diode symbol (triangle with bar)
+    g.drawLine(cx - w / 2, cy, cx - w / 6, cy, 2.0f);
+    g.drawLine(cx + w / 6, cy, cx + w / 2, cy, 2.0f);
+    // Triangle pointing right
+    juce::Path triangle;
+    triangle.startNewSubPath(cx - w / 6, cy - h / 2);
+    triangle.lineTo(cx + w / 6, cy);
+    triangle.lineTo(cx - w / 6, cy + h / 2);
+    triangle.closeSubPath();
+    g.strokePath(triangle, juce::PathStrokeType(2.0f));
+    // Bar at cathode
+    g.drawLine(cx + w / 6, cy - h / 2, cx + w / 6, cy + h / 2, 2.0f);
+    break;
+  }
+  case ComponentType::DiodePair: {
+    // Anti-parallel diode pair symbol
+    float triH = h / 3;
+    // Top diode (pointing right)
+    juce::Path tri1;
+    tri1.startNewSubPath(cx - w / 6, cy - triH - triH / 2);
+    tri1.lineTo(cx + w / 6, cy - triH);
+    tri1.lineTo(cx - w / 6, cy - triH + triH / 2);
+    tri1.closeSubPath();
+    g.strokePath(tri1, juce::PathStrokeType(1.5f));
+    g.drawLine(cx + w / 6, cy - triH - triH / 2, cx + w / 6, cy - triH + triH / 2, 1.5f);
+    // Bottom diode (pointing left)
+    juce::Path tri2;
+    tri2.startNewSubPath(cx + w / 6, cy + triH - triH / 2);
+    tri2.lineTo(cx - w / 6, cy + triH);
+    tri2.lineTo(cx + w / 6, cy + triH + triH / 2);
+    tri2.closeSubPath();
+    g.strokePath(tri2, juce::PathStrokeType(1.5f));
+    g.drawLine(cx - w / 6, cy + triH - triH / 2, cx - w / 6, cy + triH + triH / 2, 1.5f);
+    // Connection lines
+    g.drawLine(cx - w / 2, cy, cx - w / 6, cy, 2.0f);
+    g.drawLine(cx + w / 6, cy, cx + w / 2, cy, 2.0f);
+    g.drawLine(cx - w / 6, cy - triH, cx - w / 6, cy + triH, 1.0f);
+    g.drawLine(cx + w / 6, cy - triH, cx + w / 6, cy + triH, 1.0f);
+    break;
+  }
+  case ComponentType::SoftClipper: {
+    // Soft clipper symbol (tanh curve in a box)
+    float boxW = w * 0.6f;
+    float boxH = h * 0.8f;
+    g.drawRect(cx - boxW / 2, cy - boxH / 2, boxW, boxH, 1.5f);
+    // Tanh-like curve inside
+    juce::Path curve;
+    curve.startNewSubPath(cx - boxW / 2 + 3, cy + boxH / 3);
+    curve.cubicTo(cx - boxW / 6, cy + boxH / 4,
+                  cx - boxW / 8, cy,
+                  cx, cy);
+    curve.cubicTo(cx + boxW / 8, cy,
+                  cx + boxW / 6, cy - boxH / 4,
+                  cx + boxW / 2 - 3, cy - boxH / 3);
+    g.strokePath(curve, juce::PathStrokeType(2.0f));
+    // Connection lines
+    g.drawLine(cx - w / 2, cy, cx - boxW / 2, cy, 2.0f);
+    g.drawLine(cx + boxW / 2, cy, cx + w / 2, cy, 2.0f);
     break;
   }
   case ComponentType::VacuumTube: {
@@ -216,8 +291,12 @@ void ComponentPalette::createItems() {
   std::vector<ItemInfo> itemInfos = {
       {"Resistor", "component:resistor", ComponentType::Resistor},
       {"Capacitor", "component:capacitor", ComponentType::Capacitor},
+      {"Inductor", "component:inductor", ComponentType::Inductor},
       {"Pot", "component:potentiometer", ComponentType::Potentiometer},
       {"Switch", "component:switch", ComponentType::Switch},
+      {"Diode", "component:diode", ComponentType::Diode},
+      {"Diode Pair", "component:diodepair", ComponentType::DiodePair},
+      {"Clipper", "component:softclipper", ComponentType::SoftClipper},
       {"Tube", "component:tube", ComponentType::VacuumTube},
       {"Input", "component:input", ComponentType::AudioInput},
       {"Output", "component:output", ComponentType::AudioOutput},

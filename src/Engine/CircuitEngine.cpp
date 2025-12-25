@@ -9,14 +9,14 @@ CircuitEngine::~CircuitEngine() = default;
 void CircuitEngine::setCircuit(const CircuitGraph &graph) {
   const juce::ScopedLock sl(renderLock);
   circuit = &graph;
-  solver.setCircuit(graph);
+  wdfEngine.setCircuit(graph);
 }
 
 void CircuitEngine::setSampleRate(double rate) {
   const juce::ScopedLock sl(renderLock);
   sampleRate = rate;
-  // Set MNA solver sample rate with oversampling
-  solver.setSampleRate(rate * oversamplingFactor);
+  // Set WDF engine sample rate with oversampling
+  wdfEngine.setSampleRate(rate * oversamplingFactor);
 }
 
 void CircuitEngine::processSample(float inputSample, float &outputSample) {
@@ -28,7 +28,6 @@ void CircuitEngine::processSample(float inputSample, float &outputSample) {
   }
 
   double output = 0.0;
-  double internalDt = 1.0 / (sampleRate * oversamplingFactor);
 
   // Oversample for stability
   for (int i = 0; i < oversamplingFactor; ++i) {
@@ -43,8 +42,18 @@ void CircuitEngine::processSample(float inputSample, float &outputSample) {
       }
     }
 
-    solver.step(0.0);
-    output += solver.getOutputVoltage();
+    // Get input voltage from the audio input component
+    double inputVoltage = 0.0;
+    for (const auto &comp :
+         circuit->getComponentsByType(ComponentType::AudioInput)) {
+      auto *audioIn = static_cast<AudioInput *>(comp);
+      inputVoltage = audioIn->getScaledVoltage();
+      break; // Use first audio input
+    }
+
+    // Process through WDF engine
+    wdfEngine.step(inputVoltage);
+    output += wdfEngine.getOutputVoltage();
   }
 
   // Average the oversampled result (simple decimation)
@@ -85,10 +94,10 @@ void CircuitEngine::processBlock(const float *input, float *output,
 
 void CircuitEngine::setComponentValue(int componentId, double value) {
   const juce::ScopedLock sl(renderLock);
-  solver.updateComponentValue(componentId, value);
+  wdfEngine.updateComponentValue(componentId, value);
 }
 
 double CircuitEngine::getNodeVoltage(int nodeId) const {
   const juce::ScopedLock sl(renderLock);
-  return solver.getNodeVoltage(nodeId);
+  return wdfEngine.getNodeVoltage(nodeId);
 }

@@ -54,8 +54,12 @@ private:
   // Drawing helpers
   void drawResistor(juce::Graphics &g, juce::Rectangle<float> bounds);
   void drawCapacitor(juce::Graphics &g, juce::Rectangle<float> bounds);
+  void drawInductor(juce::Graphics &g, juce::Rectangle<float> bounds);
   void drawPotentiometer(juce::Graphics &g, juce::Rectangle<float> bounds);
   void drawSwitch(juce::Graphics &g, juce::Rectangle<float> bounds);
+  void drawDiode(juce::Graphics &g, juce::Rectangle<float> bounds);
+  void drawDiodePair(juce::Graphics &g, juce::Rectangle<float> bounds);
+  void drawSoftClipper(juce::Graphics &g, juce::Rectangle<float> bounds);
   void drawVacuumTube(juce::Graphics &g, juce::Rectangle<float> bounds);
   void drawAudioInput(juce::Graphics &g, juce::Rectangle<float> bounds);
   void drawAudioOutput(juce::Graphics &g, juce::Rectangle<float> bounds);

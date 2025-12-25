@@ -6,13 +6,16 @@
 
 // Forward declarations
 class CircuitComponent;
-class MNASolver;
 
 enum class ComponentType {
   Resistor,
   Capacitor,
+  Inductor,
   Potentiometer,
   Switch,
+  Diode,
+  DiodePair,
+  SoftClipper,
   VacuumTube,
   AudioInput,
   AudioOutput,

@@ -1,7 +1,11 @@
 #include "ComponentView.h"
 #include "../Engine/Components/Component.h"
+#include "../Engine/Components/Diode.h"
+#include "../Engine/Components/DiodePair.h"
 #include "../Engine/Components/Ground.h"
+#include "../Engine/Components/Inductor.h"
 #include "../Engine/Components/Potentiometer.h"
+#include "../Engine/Components/SoftClipper.h"
 #include "../Engine/Components/Switch.h"
 #include "../Engine/Components/VacuumTube.h"
 
@@ -46,11 +50,23 @@ void ComponentView::draw(juce::Graphics &g,
   case ComponentType::Capacitor:
     drawCapacitor(g, bounds);
     break;
+  case ComponentType::Inductor:
+    drawInductor(g, bounds);
+    break;
   case ComponentType::Potentiometer:
     drawPotentiometer(g, bounds);
     break;
   case ComponentType::Switch:
     drawSwitch(g, bounds);
+    break;
+  case ComponentType::Diode:
+    drawDiode(g, bounds);
+    break;
+  case ComponentType::DiodePair:
+    drawDiodePair(g, bounds);
+    break;
+  case ComponentType::SoftClipper:
+    drawSoftClipper(g, bounds);
     break;
   case ComponentType::VacuumTube:
     drawVacuumTube(g, bounds);
@@ -155,6 +171,145 @@ void ComponentView::drawCapacitor(juce::Graphics &g,
 
   g.setColour(juce::Colours::black.withAlpha(0.4f));
   g.drawRoundedRectangle(-bodyW / 2, cy - bodyH / 2, bodyW, bodyH, 1.0f, 1.0f);
+}
+
+void ComponentView::drawInductor(juce::Graphics &g,
+                                 juce::Rectangle<float> bounds) {
+  float cy = bounds.getCentreY();
+  float w = bounds.getWidth() * 0.7f;
+  float coilH = 10.0f;
+
+  // Leads
+  g.setColour(juce::Colour(0xFF888888));
+  g.drawLine(-WIDTH / 2, cy, -w / 2, cy, 1.5f);
+  g.drawLine(w / 2, cy, WIDTH / 2, cy, 1.5f);
+
+  // Coil body (copper wire look)
+  g.setColour(juce::Colour(0xFFb87333)); // Copper color
+  
+  // Draw 4 coil humps
+  juce::Path coil;
+  float coilW = w / 4;
+  coil.startNewSubPath(-w / 2, cy);
+  for (int i = 0; i < 4; i++) {
+    float startX = -w / 2 + i * coilW;
+    coil.addCentredArc(startX + coilW / 2, cy, coilW / 2, coilH / 2, 0,
+                       juce::MathConstants<float>::pi, 0, false);
+  }
+  coil.lineTo(w / 2, cy);
+  g.strokePath(coil, juce::PathStrokeType(2.5f));
+
+  // Shine highlight
+  g.setColour(juce::Colour(0xFFd4956a));
+  for (int i = 0; i < 4; i++) {
+    float cx = -w / 2 + coilW / 2 + i * coilW;
+    g.drawLine(cx - 2, cy - coilH / 2 + 1, cx + 2, cy - coilH / 2 + 1, 1.0f);
+  }
+}
+
+void ComponentView::drawDiode(juce::Graphics &g,
+                              juce::Rectangle<float> bounds) {
+  float cy = bounds.getCentreY();
+  float w = bounds.getWidth() * 0.6f;
+  float triH = 12.0f;
+
+  // Leads
+  g.setColour(juce::Colour(0xFF888888));
+  g.drawLine(-WIDTH / 2, cy, -w / 3, cy, 1.5f);
+  g.drawLine(w / 3, cy, WIDTH / 2, cy, 1.5f);
+
+  // Diode body (black epoxy)
+  g.setColour(juce::Colour(0xFF222222));
+  g.fillRoundedRectangle(-w / 3, cy - triH / 2 - 2, w * 2 / 3, triH + 4, 2.0f);
+
+  // Cathode band (silver stripe)
+  g.setColour(juce::Colour(0xFFcccccc));
+  g.fillRect(w / 3 - 6, cy - triH / 2 - 2, 4.0f, triH + 4);
+
+  // Triangle symbol overlay
+  g.setColour(juce::Colour(0xFF00ccff).withAlpha(0.5f));
+  juce::Path tri;
+  tri.startNewSubPath(-w / 6, cy - triH / 2 + 2);
+  tri.lineTo(w / 6 - 4, cy);
+  tri.lineTo(-w / 6, cy + triH / 2 - 2);
+  tri.closeSubPath();
+  g.fillPath(tri);
+}
+
+void ComponentView::drawDiodePair(juce::Graphics &g,
+                                  juce::Rectangle<float> bounds) {
+  float cy = bounds.getCentreY();
+  float w = bounds.getWidth() * 0.5f;
+  float h = bounds.getHeight() * 0.5f;
+
+  // Leads
+  g.setColour(juce::Colour(0xFF888888));
+  g.drawLine(-WIDTH / 2, cy, -w / 2, cy, 1.5f);
+  g.drawLine(w / 2, cy, WIDTH / 2, cy, 1.5f);
+
+  // Body background
+  g.setColour(juce::Colour(0xFF333333));
+  g.fillRoundedRectangle(-w / 2, cy - h / 2, w, h, 3.0f);
+  g.setColour(juce::Colour(0xFF555555));
+  g.drawRoundedRectangle(-w / 2, cy - h / 2, w, h, 3.0f, 1.0f);
+
+  // Diode symbols inside
+  g.setColour(juce::Colour(0xFF00ccff));
+  float triSize = 6.0f;
+  float offset = 5.0f;
+  
+  // Top diode (pointing right)
+  juce::Path tri1;
+  tri1.startNewSubPath(-triSize, cy - offset - triSize / 2);
+  tri1.lineTo(triSize, cy - offset);
+  tri1.lineTo(-triSize, cy - offset + triSize / 2);
+  tri1.closeSubPath();
+  g.strokePath(tri1, juce::PathStrokeType(1.5f));
+  g.drawLine(triSize, cy - offset - triSize / 2, triSize, cy - offset + triSize / 2, 1.5f);
+
+  // Bottom diode (pointing left)
+  juce::Path tri2;
+  tri2.startNewSubPath(triSize, cy + offset - triSize / 2);
+  tri2.lineTo(-triSize, cy + offset);
+  tri2.lineTo(triSize, cy + offset + triSize / 2);
+  tri2.closeSubPath();
+  g.strokePath(tri2, juce::PathStrokeType(1.5f));
+  g.drawLine(-triSize, cy + offset - triSize / 2, -triSize, cy + offset + triSize / 2, 1.5f);
+}
+
+void ComponentView::drawSoftClipper(juce::Graphics &g,
+                                    juce::Rectangle<float> bounds) {
+  float cx = bounds.getCentreX();
+  float cy = bounds.getCentreY();
+  float w = bounds.getWidth() * 0.5f;
+  float h = bounds.getHeight() * 0.5f;
+
+  // Leads
+  g.setColour(juce::Colour(0xFF888888));
+  g.drawLine(-WIDTH / 2, cy, -w / 2, cy, 1.5f);
+  g.drawLine(w / 2, cy, WIDTH / 2, cy, 1.5f);
+
+  // IC/chip body
+  g.setColour(juce::Colour(0xFF1a1a2e));
+  g.fillRoundedRectangle(-w / 2, cy - h / 2, w, h, 2.0f);
+  g.setColour(juce::Colour(0xFF444466));
+  g.drawRoundedRectangle(-w / 2, cy - h / 2, w, h, 2.0f, 1.0f);
+
+  // Tanh curve symbol
+  g.setColour(juce::Colour(0xFFff8800));
+  juce::Path curve;
+  curve.startNewSubPath(-w / 2 + 4, cy + h / 4);
+  curve.cubicTo(-w / 6, cy + h / 5,
+                -w / 8, cy,
+                0, cy);
+  curve.cubicTo(w / 8, cy,
+                w / 6, cy - h / 5,
+                w / 2 - 4, cy - h / 4);
+  g.strokePath(curve, juce::PathStrokeType(2.0f));
+
+  // Pin 1 marker (dot)
+  g.setColour(juce::Colour(0xFF888888));
+  g.fillEllipse(-w / 2 + 3, cy - h / 2 + 3, 4, 4);
 }
 
 void ComponentView::drawPotentiometer(juce::Graphics &g,

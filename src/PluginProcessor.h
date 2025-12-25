@@ -44,6 +44,7 @@ public:
   void getLatestSamples(std::vector<float> &dest) const;
   void setProbeNode(int nodeId);
   int getProbeNodeId() const { return probeNodeId; }
+  double getCurrentSampleRate() const { return currentSampleRate; }
 
 private:
   CircuitGraph circuitGraph;

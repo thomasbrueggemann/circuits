@@ -2,9 +2,13 @@
 #include "../Engine/Components/AudioInput.h"
 #include "../Engine/Components/AudioOutput.h"
 #include "../Engine/Components/Capacitor.h"
+#include "../Engine/Components/Diode.h"
+#include "../Engine/Components/DiodePair.h"
 #include "../Engine/Components/Ground.h"
+#include "../Engine/Components/Inductor.h"
 #include "../Engine/Components/Potentiometer.h"
 #include "../Engine/Components/Resistor.h"
+#include "../Engine/Components/SoftClipper.h"
 #include "../Engine/Components/Switch.h"
 #include "../Engine/Components/VacuumTube.h"
 #include "ComponentPalette.h"
@@ -540,10 +544,18 @@ void CircuitDesigner::itemDragMove(const SourceDetails &dragSourceDetails) {
     dragPreviewType = ComponentType::Resistor;
   else if (desc == "component:capacitor")
     dragPreviewType = ComponentType::Capacitor;
+  else if (desc == "component:inductor")
+    dragPreviewType = ComponentType::Inductor;
   else if (desc == "component:potentiometer")
     dragPreviewType = ComponentType::Potentiometer;
   else if (desc == "component:switch")
     dragPreviewType = ComponentType::Switch;
+  else if (desc == "component:diode")
+    dragPreviewType = ComponentType::Diode;
+  else if (desc == "component:diodepair")
+    dragPreviewType = ComponentType::DiodePair;
+  else if (desc == "component:softclipper")
+    dragPreviewType = ComponentType::SoftClipper;
   else if (desc == "component:tube")
     dragPreviewType = ComponentType::VacuumTube;
   else if (desc == "component:input")
@@ -577,10 +589,18 @@ void CircuitDesigner::itemDropped(const SourceDetails &dragSourceDetails) {
     type = ComponentType::Resistor;
   else if (desc == "component:capacitor")
     type = ComponentType::Capacitor;
+  else if (desc == "component:inductor")
+    type = ComponentType::Inductor;
   else if (desc == "component:potentiometer")
     type = ComponentType::Potentiometer;
   else if (desc == "component:switch")
     type = ComponentType::Switch;
+  else if (desc == "component:diode")
+    type = ComponentType::Diode;
+  else if (desc == "component:diodepair")
+    type = ComponentType::DiodePair;
+  else if (desc == "component:softclipper")
+    type = ComponentType::SoftClipper;
   else if (desc == "component:tube")
     type = ComponentType::VacuumTube;
   else if (desc == "component:input")
@@ -671,6 +691,13 @@ void CircuitDesigner::addComponent(ComponentType type,
     comp = std::make_unique<Capacitor>(id, name, node1, node2, 100e-9);
     break;
   }
+  case ComponentType::Inductor: {
+    int node1 = circuitGraph.createNode();
+    int node2 = circuitGraph.createNode();
+    name = "L" + juce::String(id);
+    comp = std::make_unique<Inductor>(id, name, node1, node2, 100e-3);
+    break;
+  }
   case ComponentType::Potentiometer: {
     int node1 = circuitGraph.createNode();
     int node2 = circuitGraph.createNode();
@@ -685,6 +712,27 @@ void CircuitDesigner::addComponent(ComponentType type,
     int node2 = circuitGraph.createNode();
     name = "SW" + juce::String(id);
     comp = std::make_unique<Switch>(id, name, node1, node2);
+    break;
+  }
+  case ComponentType::Diode: {
+    int node1 = circuitGraph.createNode();
+    int node2 = circuitGraph.createNode();
+    name = "D" + juce::String(id);
+    comp = std::make_unique<Diode>(id, name, node1, node2);
+    break;
+  }
+  case ComponentType::DiodePair: {
+    int node1 = circuitGraph.createNode();
+    int node2 = circuitGraph.createNode();
+    name = "DP" + juce::String(id);
+    comp = std::make_unique<DiodePair>(id, name, node1, node2);
+    break;
+  }
+  case ComponentType::SoftClipper: {
+    int node1 = circuitGraph.createNode();
+    int node2 = circuitGraph.createNode();
+    name = "SC" + juce::String(id);
+    comp = std::make_unique<SoftClipper>(id, name, node1, node2);
     break;
   }
   case ComponentType::VacuumTube: {

@@ -1,8 +1,17 @@
 #pragma once
 
 #include "CircuitGraph.h"
-#include "MNASolver.h"
+#include "WDF/WDFEngine.h"
 
+/**
+ * Circuit simulation engine using Wave Digital Filters.
+ * 
+ * WDF-based simulation provides:
+ * - Guaranteed stability for linear circuits
+ * - No matrix inversion (efficient real-time processing)
+ * - Natural handling of reactive elements (C, L)
+ * - Local nonlinear solving at root elements
+ */
 class CircuitEngine {
 public:
   CircuitEngine();
@@ -23,12 +32,10 @@ public:
   // Simulation control
   void setSimulationActive(bool active) { simulationActive = active; }
   bool isSimulationActive() const { return simulationActive; }
-  bool isSimulationValid() const { return !solver.isSimulationFailed(); }
-
-  // Oversampling factor for stability
+  bool isSimulationValid() const { return !wdfEngine.isSimulationFailed(); }
 
 private:
-  MNASolver solver;
+  WDF::WDFEngine wdfEngine;
   const CircuitGraph *circuit = nullptr;
 
   double sampleRate = 44100.0;

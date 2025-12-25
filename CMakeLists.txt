@@ -9,6 +9,8 @@ set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
 
 if(APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X version")
+    # Fix for missing C++ headers with Command Line Tools
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -isystem /Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1")
 endif()
 
 # Add JUCE
@@ -43,7 +45,9 @@ PRIVATE
     # Engine
     src/Engine/CircuitEngine.cpp
     src/Engine/CircuitGraph.cpp
-    src/Engine/MNASolver.cpp
+    
+    # WDF Engine
+    src/Engine/WDF/WDFEngine.cpp
     
     # Components
     src/Engine/Components/Resistor.cpp
@@ -70,6 +74,7 @@ PRIVATE
     src
     src/Engine
     src/Engine/Components
+    src/Engine/WDF
     src/UI
 )
 if(APPLE)
