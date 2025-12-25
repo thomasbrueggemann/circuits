@@ -42,7 +42,7 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
     // Auto-start simulation when circuit changes
     engine.setSimulationActive(true);
     
-    autoProbe();
+    // Don't auto-probe - only show oscilloscope when a wire is selected
   };
 
   // Set editor size
@@ -53,8 +53,8 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
   // Start timer for UI updates
   startTimerHz(30);
 
-  // Initial auto-probe
-  autoProbe();
+  // No auto-probe - oscilloscope only shows data when a wire is selected
+  oscilloscopeView->setProbeActive(false);
 }
 
 CircuitsAudioProcessorEditor::~CircuitsAudioProcessorEditor() {
@@ -134,25 +134,4 @@ void CircuitsAudioProcessorEditor::timerCallback() {
 
 void CircuitsAudioProcessorEditor::updateControlPanel() {
   controlPanel->rebuildControls();
-}
-
-void CircuitsAudioProcessorEditor::autoProbe() {
-  auto &graph = audioProcessor.getCircuitGraph();
-
-  for (const auto &comp : graph.getComponents()) {
-    if (comp->getType() == ComponentType::AudioOutput) {
-      audioProcessor.setProbeNode(comp->getNode1());
-      oscilloscopeView->setProbeActive(true);
-      return;
-    }
-  }
-
-  // If no output, try to find any node with a connection that is NOT ground
-  for (int i = 1; i < graph.getNodeCount(); ++i) {
-    audioProcessor.setProbeNode(i);
-    oscilloscopeView->setProbeActive(true);
-    return;
-  }
-
-  oscilloscopeView->setProbeActive(false);
 }

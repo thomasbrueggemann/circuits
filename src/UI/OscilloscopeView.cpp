@@ -535,8 +535,7 @@ void OscilloscopeView::drawNoSignalMessage(juce::Graphics &g,
     msg = "NO SIGNAL PATH\n\nAudio In and Out are not connected!\n"
           "Draw a wire from Input to Output";
   else if (!probeActive)
-    msg = "No Probe Active\n\nClick a wire or connect AudioOutput\nEnsure "
-          "START is pressed";
+    msg = "No Probe Active\n\nClick on a wire in the circuit\nto see its signal";
   else if (!simulationRunning)
     msg = "Simulation Stopped\n\nPress START to begin";
 

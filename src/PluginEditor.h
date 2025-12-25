@@ -21,7 +21,6 @@ public:
   void timerCallback() override;
 
   void updateControlPanel();
-  void autoProbe();
 
 private:
   CircuitsAudioProcessor &audioProcessor;
