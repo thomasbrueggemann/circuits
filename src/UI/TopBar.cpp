@@ -1,8 +1,23 @@
 #include "TopBar.h"
+#include "../CircuitSerializer.h"
 #include "../Engine/Components/AudioInput.h"
 
 TopBar::TopBar(CircuitGraph &graph, CircuitEngine &engine)
     : circuitGraph(graph), circuitEngine(engine) {
+
+  // LOAD Button
+  loadButton = std::make_unique<juce::TextButton>("LOAD");
+  loadButton->setColour(juce::TextButton::buttonColourId,
+                        juce::Colour(0xFF3498db));
+  loadButton->onClick = [this]() { loadCircuit(); };
+  addAndMakeVisible(*loadButton);
+
+  // SAVE Button
+  saveButton = std::make_unique<juce::TextButton>("SAVE");
+  saveButton->setColour(juce::TextButton::buttonColourId,
+                        juce::Colour(0xFF9b59b6));
+  saveButton->onClick = [this]() { saveCircuit(); };
+  addAndMakeVisible(*saveButton);
 
   // START Button
   startButton = std::make_unique<juce::TextButton>("START");
@@ -101,7 +116,14 @@ void TopBar::paint(juce::Graphics &g) {
 void TopBar::resized() {
   auto bounds = getLocalBounds();
 
-  // Left: simulation controls
+  // Left: file controls
+  auto fileBounds = bounds.removeFromLeft(130).reduced(10, 10);
+  auto fileButtonArea = fileBounds.removeFromTop(40);
+  loadButton->setBounds(fileButtonArea.removeFromLeft(50));
+  fileButtonArea.removeFromLeft(5);
+  saveButton->setBounds(fileButtonArea.removeFromLeft(50));
+
+  // Simulation controls
   auto simBounds = bounds.removeFromLeft(180).reduced(10, 5);
   auto buttonArea = simBounds.removeFromTop(30);
   startButton->setBounds(
@@ -174,4 +196,66 @@ AudioInput *TopBar::getFirstInput() {
     }
   }
   return nullptr;
+}
+
+void TopBar::loadCircuit() {
+  fileChooser = std::make_unique<juce::FileChooser>(
+      "Load Circuit", juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+      "*.json");
+
+  auto chooserFlags = juce::FileBrowserComponent::openMode |
+                      juce::FileBrowserComponent::canSelectFiles;
+
+  fileChooser->launchAsync(chooserFlags, [this](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file.existsAsFile()) {
+      // Stop simulation during load
+      circuitEngine.setSimulationActive(false);
+
+      if (CircuitSerializer::loadFromFile(file, circuitGraph)) {
+        // Update the engine with the new circuit
+        circuitEngine.setCircuit(circuitGraph);
+
+        // Notify that circuit was loaded (so UI can rebuild)
+        if (onCircuitLoaded) {
+          onCircuitLoaded();
+        }
+
+        // Auto-start simulation
+        circuitEngine.setSimulationActive(true);
+        updateButtonStates();
+      } else {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::AlertWindow::WarningIcon, "Load Error",
+            "Failed to load circuit from file.");
+      }
+    }
+  });
+}
+
+void TopBar::saveCircuit() {
+  fileChooser = std::make_unique<juce::FileChooser>(
+      "Save Circuit", juce::File::getSpecialLocation(juce::File::userHomeDirectory),
+      "*.json");
+
+  auto chooserFlags = juce::FileBrowserComponent::saveMode |
+                      juce::FileBrowserComponent::canSelectFiles;
+
+  fileChooser->launchAsync(chooserFlags, [this](const juce::FileChooser &fc) {
+    auto file = fc.getResult();
+    if (file != juce::File{}) {
+      // Ensure .json extension
+      if (!file.hasFileExtension(".json")) {
+        file = file.withFileExtension(".json");
+      }
+
+      if (CircuitSerializer::saveToFile(circuitGraph, file)) {
+        // Success - no need to show message
+      } else {
+        juce::AlertWindow::showMessageBoxAsync(
+            juce::AlertWindow::WarningIcon, "Save Error",
+            "Failed to save circuit to file.");
+      }
+    }
+  });
 }

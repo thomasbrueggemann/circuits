@@ -48,6 +48,9 @@ public:
   std::function<void(int nodeId)> onWireSelected;
   std::function<void()> onCircuitChanged;
 
+  // Rebuild views from graph (e.g., after loading)
+  void rebuildFromGraph();
+
   // Canvas transformation
   juce::Point<float> screenToCanvas(juce::Point<float> screenPos) const;
   juce::Point<float> canvasToScreen(juce::Point<float> canvasPos) const;

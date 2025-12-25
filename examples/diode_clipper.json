@@ -1,0 +1,79 @@
+{
+    "nodes": [
+        {"id": 0, "name": "GND", "isGround": true},
+        {"id": 1, "name": "Input", "isGround": false},
+        {"id": 2, "name": "Clipped", "isGround": false},
+        {"id": 3, "name": "Output", "isGround": false}
+    ],
+    "components": [
+        {
+            "id": 0,
+            "type": 9,
+            "name": "IN",
+            "node1": 1,
+            "node2": 0,
+            "posX": 100,
+            "posY": 200,
+            "value": 0
+        },
+        {
+            "id": 1,
+            "type": 0,
+            "name": "R1",
+            "node1": 1,
+            "node2": 2,
+            "posX": 220,
+            "posY": 200,
+            "value": 4700
+        },
+        {
+            "id": 2,
+            "type": 6,
+            "name": "D1",
+            "node1": 2,
+            "node2": 0,
+            "posX": 320,
+            "posY": 280,
+            "value": 0,
+            "pairType": 1,
+            "saturationCurrent": 2.52e-9,
+            "emissionCoefficient": 1.752
+        },
+        {
+            "id": 3,
+            "type": 1,
+            "name": "C1",
+            "node1": 2,
+            "node2": 3,
+            "posX": 420,
+            "posY": 200,
+            "value": 100e-9
+        },
+        {
+            "id": 4,
+            "type": 0,
+            "name": "R2",
+            "node1": 3,
+            "node2": 0,
+            "posX": 500,
+            "posY": 280,
+            "value": 100000
+        },
+        {
+            "id": 5,
+            "type": 10,
+            "name": "OUT",
+            "node1": 3,
+            "node2": 0,
+            "posX": 600,
+            "posY": 200,
+            "value": 0
+        }
+    ],
+    "wires": [
+        {"id": 0, "nodeA": 1, "nodeB": 2},
+        {"id": 1, "nodeA": 2, "nodeB": 3}
+    ],
+    "junctions": []
+}
+

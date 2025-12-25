@@ -1,0 +1,31 @@
+{
+    "nodes": [
+        {"id": 0, "name": "GND", "isGround": true},
+        {"id": 1, "name": "Signal", "isGround": false}
+    ],
+    "components": [
+        {
+            "id": 0,
+            "type": 9,
+            "name": "IN",
+            "node1": 1,
+            "node2": 0,
+            "posX": 150,
+            "posY": 200,
+            "value": 0
+        },
+        {
+            "id": 1,
+            "type": 10,
+            "name": "OUT",
+            "node1": 1,
+            "node2": 0,
+            "posX": 350,
+            "posY": 200,
+            "value": 0
+        }
+    ],
+    "wires": [],
+    "junctions": []
+}
+

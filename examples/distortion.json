@@ -1,40 +1,16 @@
 {
     "nodes": [
-        {
-            "id": 0,
-            "name": "GND",
-            "isGround": true
-        },
-        {
-            "id": 1,
-            "name": "Input",
-            "isGround": false
-        },
-        {
-            "id": 2,
-            "name": "Clipped",
-            "isGround": false
-        },
-        {
-            "id": 3,
-            "name": "Filtered",
-            "isGround": false
-        },
-        {
-            "id": 4,
-            "name": "ToneWiper",
-            "isGround": false
-        },
-        {
-            "id": 5,
-            "name": "Output",
-            "isGround": false
-        }
+        {"id": 0, "name": "GND", "isGround": true},
+        {"id": 1, "name": "Input", "isGround": false},
+        {"id": 2, "name": "Clipped", "isGround": false},
+        {"id": 3, "name": "Filtered", "isGround": false},
+        {"id": 4, "name": "ToneWiper", "isGround": false},
+        {"id": 5, "name": "Output", "isGround": false}
     ],
     "components": [
         {
             "id": 0,
-            "type": 5,
+            "type": 9,
             "name": "IN",
             "node1": 1,
             "node2": 0,
@@ -44,25 +20,28 @@
         },
         {
             "id": 1,
-            "type": 2,
+            "type": 3,
             "name": "GAIN",
             "node1": 1,
             "node2": 0,
             "node3": 2,
-            "posX": 130,
+            "posX": 150,
             "posY": 200,
             "value": 500000,
             "position": 0.6
         },
         {
             "id": 2,
-            "type": 0,
-            "name": "R1",
+            "type": 6,
+            "name": "D1",
             "node1": 2,
             "node2": 0,
-            "posX": 200,
+            "posX": 250,
             "posY": 280,
-            "value": 10000
+            "value": 0,
+            "pairType": 0,
+            "saturationCurrent": 1e-12,
+            "emissionCoefficient": 1.0
         },
         {
             "id": 3,
@@ -70,28 +49,28 @@
             "name": "C1",
             "node1": 2,
             "node2": 3,
-            "posX": 270,
+            "posX": 350,
             "posY": 200,
             "value": 47e-9
         },
         {
             "id": 4,
             "type": 0,
-            "name": "R2",
+            "name": "R1",
             "node1": 3,
             "node2": 0,
-            "posX": 330,
+            "posX": 400,
             "posY": 280,
             "value": 4700
         },
         {
             "id": 5,
-            "type": 2,
+            "type": 3,
             "name": "TONE",
             "node1": 3,
             "node2": 0,
             "node3": 4,
-            "posX": 400,
+            "posX": 500,
             "posY": 200,
             "value": 100000,
             "position": 0.5
@@ -102,53 +81,38 @@
             "name": "C2",
             "node1": 4,
             "node2": 5,
-            "posX": 470,
+            "posX": 600,
             "posY": 200,
             "value": 100e-9
         },
         {
             "id": 7,
-            "type": 2,
+            "type": 3,
             "name": "VOL",
             "node1": 5,
             "node2": 0,
             "node3": 5,
-            "posX": 540,
+            "posX": 700,
             "posY": 250,
             "value": 100000,
             "position": 0.7
         },
         {
             "id": 8,
-            "type": 6,
+            "type": 10,
             "name": "OUT",
             "node1": 5,
             "node2": 0,
-            "posX": 610,
+            "posX": 800,
             "posY": 200,
             "value": 0
         }
     ],
     "wires": [
-        {
-            "id": 0,
-            "nodeA": 1,
-            "nodeB": 2
-        },
-        {
-            "id": 1,
-            "nodeA": 2,
-            "nodeB": 3
-        },
-        {
-            "id": 2,
-            "nodeA": 3,
-            "nodeB": 4
-        },
-        {
-            "id": 3,
-            "nodeA": 4,
-            "nodeB": 5
-        }
-    ]
+        {"id": 0, "nodeA": 1, "nodeB": 2},
+        {"id": 1, "nodeA": 2, "nodeB": 3},
+        {"id": 2, "nodeA": 3, "nodeB": 4},
+        {"id": 3, "nodeA": 4, "nodeB": 5}
+    ],
+    "junctions": []
 }

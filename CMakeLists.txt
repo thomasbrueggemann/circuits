@@ -104,3 +104,60 @@ PUBLIC
     juce::juce_recommended_lto_flags
     juce::juce_recommended_warning_flags
 )
+
+# =============================================================================
+# Test Executable
+# =============================================================================
+option(BUILD_TESTS "Build unit tests" ON)
+
+if(BUILD_TESTS)
+    juce_add_console_app(WDFTests
+        PRODUCT_NAME "WDFTests"
+    )
+
+    juce_generate_juce_header(WDFTests)
+
+    target_sources(WDFTests
+    PRIVATE
+        tests/WDFTests.cpp
+        src/Engine/WDF/WDFEngine.cpp
+        src/Engine/CircuitGraph.cpp
+        src/Engine/Components/Resistor.cpp
+        src/Engine/Components/Capacitor.cpp
+        src/Engine/Components/Potentiometer.cpp
+        src/Engine/Components/Switch.cpp
+        src/Engine/Components/VacuumTube.cpp
+        src/Engine/Components/AudioInput.cpp
+        src/Engine/Components/AudioOutput.cpp
+    )
+
+    target_include_directories(WDFTests
+    PRIVATE
+        src
+        src/Engine
+        src/Engine/Components
+        src/Engine/WDF
+    )
+
+    target_compile_definitions(WDFTests
+    PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+    )
+
+    target_link_libraries(WDFTests
+    PRIVATE
+        juce::juce_core
+        juce::juce_data_structures
+        juce::juce_events
+        juce::juce_gui_basics
+        juce::juce_audio_basics
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags
+    )
+
+    if(APPLE)
+        target_compile_options(WDFTests PRIVATE "-isystem" "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1")
+    endif()
+endif()

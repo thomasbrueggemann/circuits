@@ -45,6 +45,13 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
     // Don't auto-probe - only show oscilloscope when a wire is selected
   };
 
+  // Callback when circuit is loaded from file
+  topBar->onCircuitLoaded = [this]() {
+    circuitDesigner->rebuildFromGraph();
+    updateControlPanel();
+    oscilloscopeView->setProbeActive(false);
+  };
+
   // Set editor size
   setSize(1200, 800);
   setResizable(true, true);

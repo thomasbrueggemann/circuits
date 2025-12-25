@@ -1077,3 +1077,8 @@ void CircuitDesigner::rebuildViews() {
 
   repaint();
 }
+
+void CircuitDesigner::rebuildFromGraph() {
+  rebuildViews();
+  zoomToFit();
+}

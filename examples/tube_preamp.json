@@ -1,40 +1,16 @@
 {
     "nodes": [
-        {
-            "id": 0,
-            "name": "GND",
-            "isGround": true
-        },
-        {
-            "id": 1,
-            "name": "Input",
-            "isGround": false
-        },
-        {
-            "id": 2,
-            "name": "Grid",
-            "isGround": false
-        },
-        {
-            "id": 3,
-            "name": "Cathode",
-            "isGround": false
-        },
-        {
-            "id": 4,
-            "name": "Plate",
-            "isGround": false
-        },
-        {
-            "id": 5,
-            "name": "Output",
-            "isGround": false
-        }
+        {"id": 0, "name": "GND", "isGround": true},
+        {"id": 1, "name": "Input", "isGround": false},
+        {"id": 2, "name": "Grid", "isGround": false},
+        {"id": 3, "name": "Cathode", "isGround": false},
+        {"id": 4, "name": "Plate", "isGround": false},
+        {"id": 5, "name": "Output", "isGround": false}
     ],
     "components": [
         {
             "id": 0,
-            "type": 5,
+            "type": 9,
             "name": "IN",
             "node1": 1,
             "node2": 0,
@@ -48,7 +24,7 @@
             "name": "Cin",
             "node1": 1,
             "node2": 2,
-            "posX": 130,
+            "posX": 150,
             "posY": 200,
             "value": 22e-9
         },
@@ -58,18 +34,18 @@
             "name": "Rg",
             "node1": 2,
             "node2": 0,
-            "posX": 180,
-            "posY": 280,
+            "posX": 200,
+            "posY": 300,
             "value": 1000000
         },
         {
             "id": 3,
-            "type": 4,
+            "type": 8,
             "name": "V1",
             "node1": 2,
             "node2": 3,
             "node3": 4,
-            "posX": 280,
+            "posX": 350,
             "posY": 200,
             "value": 0,
             "mu": 100
@@ -80,8 +56,8 @@
             "name": "Rk",
             "node1": 3,
             "node2": 0,
-            "posX": 280,
-            "posY": 320,
+            "posX": 350,
+            "posY": 350,
             "value": 1500
         },
         {
@@ -90,8 +66,8 @@
             "name": "Ck",
             "node1": 3,
             "node2": 0,
-            "posX": 320,
-            "posY": 320,
+            "posX": 420,
+            "posY": 350,
             "value": 25e-6
         },
         {
@@ -100,8 +76,8 @@
             "name": "Rp",
             "node1": 4,
             "node2": 0,
-            "posX": 280,
-            "posY": 100,
+            "posX": 350,
+            "posY": 80,
             "value": 100000
         },
         {
@@ -110,48 +86,37 @@
             "name": "Cout",
             "node1": 4,
             "node2": 5,
-            "posX": 380,
+            "posX": 500,
             "posY": 200,
             "value": 100e-9
         },
         {
             "id": 8,
-            "type": 2,
+            "type": 3,
             "name": "VOL",
             "node1": 5,
             "node2": 0,
             "node3": 5,
-            "posX": 450,
+            "posX": 600,
             "posY": 250,
             "value": 500000,
             "position": 0.5
         },
         {
             "id": 9,
-            "type": 6,
+            "type": 10,
             "name": "OUT",
             "node1": 5,
             "node2": 0,
-            "posX": 520,
+            "posX": 700,
             "posY": 200,
             "value": 0
         }
     ],
     "wires": [
-        {
-            "id": 0,
-            "nodeA": 1,
-            "nodeB": 2
-        },
-        {
-            "id": 1,
-            "nodeA": 2,
-            "nodeB": 3
-        },
-        {
-            "id": 2,
-            "nodeA": 4,
-            "nodeB": 5
-        }
-    ]
+        {"id": 0, "nodeA": 1, "nodeB": 2},
+        {"id": 1, "nodeA": 2, "nodeB": 3},
+        {"id": 2, "nodeA": 4, "nodeB": 5}
+    ],
+    "junctions": []
 }

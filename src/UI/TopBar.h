@@ -13,9 +13,16 @@ public:
   void resized() override;
   void timerCallback() override;
 
+  // Callback when circuit is loaded from file
+  std::function<void()> onCircuitLoaded;
+
 private:
   CircuitGraph &circuitGraph;
   CircuitEngine &circuitEngine;
+
+  // File controls
+  std::unique_ptr<juce::TextButton> loadButton;
+  std::unique_ptr<juce::TextButton> saveButton;
 
   // Simulation controls
   std::unique_ptr<juce::TextButton> startButton;
@@ -31,7 +38,11 @@ private:
   std::unique_ptr<juce::Label> genHeaderLabel;
 
   void updateButtonStates();
+  void loadCircuit();
+  void saveCircuit();
   class AudioInput *getFirstInput();
+
+  std::unique_ptr<juce::FileChooser> fileChooser;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TopBar)
 };

@@ -1,0 +1,54 @@
+{
+    "nodes": [
+        {"id": 0, "name": "GND", "isGround": true},
+        {"id": 1, "name": "Input", "isGround": false},
+        {"id": 2, "name": "Output", "isGround": false}
+    ],
+    "components": [
+        {
+            "id": 0,
+            "type": 9,
+            "name": "IN",
+            "node1": 1,
+            "node2": 0,
+            "posX": 100,
+            "posY": 200,
+            "value": 0
+        },
+        {
+            "id": 1,
+            "type": 0,
+            "name": "R1",
+            "node1": 1,
+            "node2": 2,
+            "posX": 250,
+            "posY": 200,
+            "value": 10000
+        },
+        {
+            "id": 2,
+            "type": 1,
+            "name": "C1",
+            "node1": 2,
+            "node2": 0,
+            "posX": 350,
+            "posY": 280,
+            "value": 100e-9
+        },
+        {
+            "id": 3,
+            "type": 10,
+            "name": "OUT",
+            "node1": 2,
+            "node2": 0,
+            "posX": 450,
+            "posY": 200,
+            "value": 0
+        }
+    ],
+    "wires": [
+        {"id": 0, "nodeA": 1, "nodeB": 2}
+    ],
+    "junctions": []
+}
+
