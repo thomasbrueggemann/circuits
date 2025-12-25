@@ -37,6 +37,7 @@ public:
   double getNodeVoltage(int nodeId) const;
   double getBranchCurrent(int branchId) const;
   double getOutputVoltage() const;
+  bool isSimulationFailed() const { return simulationFailed; }
 
   // Component value updates (for real-time control)
   void updateComponentValue(int componentId, double value);
@@ -118,12 +119,12 @@ private:
   // Simulation parameters
   double sampleRate = 44100.0;
   double dt = 1.0 / 44100.0; // Timestep
+  bool simulationFailed = false;
 
   // State for capacitors (companion model)
   std::vector<double> capVoltages;
   std::vector<double> capCurrents;
 
   // Input/output node indices
-  int inputNodeIndex = -1;
   int outputNodeIndex = -1;
 };

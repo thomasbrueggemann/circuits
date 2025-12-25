@@ -93,77 +93,96 @@ void ComponentView::draw(juce::Graphics &g,
 
 void ComponentView::drawResistor(juce::Graphics &g,
                                  juce::Rectangle<float> bounds) {
-  g.setColour(juce::Colour(0xFF00ccff));
-
   float cy = bounds.getCentreY();
-  float w = bounds.getWidth() * 0.8f;
+  float w = bounds.getWidth() * 0.7f;
+  float bodyH = 10.0f;
 
-  // Horizontal leads
-  g.drawLine(-WIDTH / 2, cy, -w / 2, cy, 2.0f);
-  g.drawLine(w / 2, cy, WIDTH / 2, cy, 2.0f);
+  // Leads
+  g.setColour(juce::Colour(0xFF888888));
+  g.drawLine(-WIDTH / 2, cy, -w / 2, cy, 1.5f);
+  g.drawLine(w / 2, cy, WIDTH / 2, cy, 1.5f);
 
-  // Zigzag body
-  juce::Path path;
-  path.startNewSubPath(-w / 2, cy);
-  float zigW = w / 6;
-  float zigH = 8;
-  path.lineTo(-w / 2 + zigW * 0.5f, cy - zigH);
-  path.lineTo(-w / 2 + zigW * 1.5f, cy + zigH);
-  path.lineTo(-w / 2 + zigW * 2.5f, cy - zigH);
-  path.lineTo(-w / 2 + zigW * 3.5f, cy + zigH);
-  path.lineTo(-w / 2 + zigW * 4.5f, cy - zigH);
-  path.lineTo(-w / 2 + zigW * 5.5f, cy);
-  path.lineTo(w / 2, cy);
-  g.strokePath(path, juce::PathStrokeType(2.0f));
+  // Resistor body (beige/tan)
+  g.setColour(juce::Colour(0xFFd2b48c));
+  g.fillRoundedRectangle(-w / 2, cy - bodyH / 2, w, bodyH, 2.0f);
+  g.setColour(juce::Colours::black.withAlpha(0.3f));
+  g.drawRoundedRectangle(-w / 2, cy - bodyH / 2, w, bodyH, 2.0f, 1.0f);
+
+  // Color bands (simulated for now, let's add 3 bands)
+  float bandW = 3.0f;
+  float bandGap = (w - bandW * 4) / 5;
+
+  // Band 1
+  g.setColour(juce::Colour(0xFF8b4513)); // Brown
+  g.fillRect(-w / 2 + bandGap, cy - bodyH / 2, bandW, bodyH);
+
+  // Band 2
+  g.setColour(juce::Colours::black);
+  g.fillRect(-w / 2 + bandGap * 2 + bandW, cy - bodyH / 2, bandW, bodyH);
+
+  // Multiplier
+  g.setColour(juce::Colour(0xFFff4500)); // Orange
+  g.fillRect(-w / 2 + bandGap * 3 + bandW * 2, cy - bodyH / 2, bandW, bodyH);
+
+  // Tolerance (Gold)
+  g.setColour(juce::Colour(0xFFffd700));
+  g.fillRect(w / 2 - bandGap - bandW, cy - bodyH / 2, bandW, bodyH);
 }
 
 void ComponentView::drawCapacitor(juce::Graphics &g,
                                   juce::Rectangle<float> bounds) {
-  g.setColour(juce::Colour(0xFF00ff88));
-
   float cx = bounds.getCentreX();
   float cy = bounds.getCentreY();
-  float plateGap = 8.0f;
+  float bodyW = 14.0f;
+  float bodyH = 20.0f;
 
   // Leads
-  g.drawLine(-WIDTH / 2, cy, cx - plateGap / 2, cy, 2.0f);
-  g.drawLine(cx + plateGap / 2, cy, WIDTH / 2, cy, 2.0f);
+  g.setColour(juce::Colour(0xFF888888));
+  g.drawLine(-WIDTH / 2, cy, -bodyW / 2, cy, 1.5f);
+  g.drawLine(bodyW / 2, cy, WIDTH / 2, cy, 1.5f);
 
-  // Plates
-  g.drawLine(cx - plateGap / 2, cy - 12, cx - plateGap / 2, cy + 12, 2.5f);
-  g.drawLine(cx + plateGap / 2, cy - 12, cx + plateGap / 2, cy + 12, 2.5f);
+  // Capacitor body (Blue electrolytic cylinder look)
+  g.setColour(juce::Colour(0xFF2255aa));
+  g.fillRoundedRectangle(-bodyW / 2, cy - bodyH / 2, bodyW, bodyH, 1.0f);
+
+  // Negative stripe
+  g.setColour(juce::Colour(0xFFbbbbbb));
+  g.fillRect(-bodyW / 2 + 2, cy - bodyH / 2, 4.0f, bodyH);
+
+  // Shine/Highlight
+  g.setColour(juce::Colours::white.withAlpha(0.2f));
+  g.fillRect(bodyW / 2 - 4, cy - bodyH / 2, 2.0f, bodyH);
+
+  g.setColour(juce::Colours::black.withAlpha(0.4f));
+  g.drawRoundedRectangle(-bodyW / 2, cy - bodyH / 2, bodyW, bodyH, 1.0f, 1.0f);
 }
 
 void ComponentView::drawPotentiometer(juce::Graphics &g,
                                       juce::Rectangle<float> bounds) {
-  g.setColour(juce::Colour(0xFFffaa00));
-
   float cx = bounds.getCentreX();
   float cy = bounds.getCentreY();
-  float w = bounds.getWidth() * 0.7f;
+  float radius = 15.0f;
 
-  // Leads
-  g.drawLine(-WIDTH / 2, cy, -w / 2, cy, 2.0f);
-  g.drawLine(w / 2, cy, WIDTH / 2, cy, 2.0f);
+  // Knob body (Dark plastic)
+  g.setColour(juce::Colour(0xFF222222));
+  g.fillEllipse(cx - radius, cy - radius, radius * 2, radius * 2);
 
-  // Resistor body
-  juce::Path path;
-  path.startNewSubPath(-w / 2, cy);
-  float zigW = w / 5;
-  float zigH = 6;
-  path.lineTo(-w / 2 + zigW * 0.5f, cy - zigH);
-  path.lineTo(-w / 2 + zigW * 1.5f, cy + zigH);
-  path.lineTo(-w / 2 + zigW * 2.5f, cy - zigH);
-  path.lineTo(-w / 2 + zigW * 3.5f, cy + zigH);
-  path.lineTo(-w / 2 + zigW * 4.5f, cy);
-  path.lineTo(w / 2, cy);
-  g.strokePath(path, juce::PathStrokeType(2.0f));
+  // Outer ring/shadow
+  g.setColour(juce::Colours::black);
+  g.drawEllipse(cx - radius, cy - radius, radius * 2, radius * 2, 1.5f);
 
-  // Wiper arrow
-  g.drawArrow(juce::Line<float>(cx, cy + 15, cx, cy + 4), 2.0f, 8.0f, 6.0f);
+  // Pointer line
+  g.setColour(juce::Colour(0xFFff8800));
+  juce::Path p;
+  p.addRectangle(-1.0f, -radius, 2.0f, radius * 0.4f);
+  p.applyTransform(juce::AffineTransform::rotation(-2.0f).translated(cx, cy));
+  g.fillPath(p);
 
-  // Wiper terminal
-  g.drawLine(cx, cy - HEIGHT / 2, cx, cy - 10, 2.0f);
+  // Terminals (3 pins)
+  g.setColour(juce::Colour(0xFF888888));
+  g.drawLine(-WIDTH / 2, cy, cx - radius, cy, 1.5f);  // Left
+  g.drawLine(cx + radius, cy, WIDTH / 2, cy, 1.5f);   // Right
+  g.drawLine(cx, cy - radius, cx, -HEIGHT / 2, 1.5f); // Top (wiper)
 }
 
 void ComponentView::drawSwitch(juce::Graphics &g,
@@ -171,51 +190,70 @@ void ComponentView::drawSwitch(juce::Graphics &g,
   auto *sw = dynamic_cast<Switch *>(component);
   bool closed = sw ? sw->isClosed() : false;
 
-  g.setColour(closed ? juce::Colour(0xFF00ff00) : juce::Colour(0xFFff4444));
-
   float cy = bounds.getCentreY();
 
-  // Leads
-  g.drawLine(-WIDTH / 2, cy, -10, cy, 2.0f);
-  g.drawLine(10, cy, WIDTH / 2, cy, 2.0f);
+  // Metal body/shadow
+  g.setColour(juce::Colour(0xFF333333));
+  g.fillRect(-15.0f, cy - 8.0f, 30.0f, 16.0f);
+  g.setColour(juce::Colour(0xFF888888));
+  g.drawRect(-15.0f, cy - 8.0f, 30.0f, 16.0f, 1.0f);
 
-  // Contact points
-  g.fillEllipse(-13, cy - 3, 6, 6);
-  g.fillEllipse(7, cy - 3, 6, 6);
-
-  // Switch arm
+  // Toggle lever
+  g.setColour(juce::Colour(0xFFaaaaaa));
   if (closed) {
-    g.drawLine(-10, cy, 10, cy, 2.5f);
+    g.drawLine(0, cy, 10, cy, 4.0f); // Toggled right
+    g.setColour(juce::Colour(0xFF00ff00).withAlpha(0.6f));
+    g.fillEllipse(5, cy - 3, 6, 6); // Green led
   } else {
-    g.drawLine(-10, cy, 5, cy - 12, 2.5f);
+    g.drawLine(0, cy, -10, cy - 5, 4.0f); // Toggled left/up
+    g.setColour(juce::Colour(0xFFff4444).withAlpha(0.6f));
+    g.fillEllipse(-11, cy - 3, 6, 6); // Red led
   }
+
+  // Leads
+  g.setColour(juce::Colour(0xFF888888));
+  g.drawLine(-WIDTH / 2, cy, -15, cy, 1.5f);
+  g.drawLine(15, cy, WIDTH / 2, cy, 1.5f);
 }
 
 void ComponentView::drawVacuumTube(juce::Graphics &g,
                                    juce::Rectangle<float> bounds) {
-  g.setColour(juce::Colour(0xFFff8800));
-
   float cx = bounds.getCentreX();
   float cy = bounds.getCentreY();
-  float radius = 16;
+  float radius = 18;
 
-  // Envelope (circle)
-  g.drawEllipse(cx - radius, cy - radius, radius * 2, radius * 2, 2.0f);
+  // Heater glow (Orange radial gradient)
+  juce::ColourGradient heater(juce::Colour(0x66ff8800), cx, cy + 8,
+                              juce::Colour(0x00ff8800), cx, cy + radius, true);
+  g.setGradientFill(heater);
+  g.fillEllipse(cx - 10, cy, 20, 15);
+
+  // Envelope (Glass)
+  g.setColour(juce::Colours::white.withAlpha(0.3f));
+  g.drawEllipse(cx - radius, cy - radius, radius * 2, radius * 2, 1.5f);
+
+  // Shine on glass
+  g.setColour(juce::Colours::white.withAlpha(0.1f));
+  g.fillEllipse(cx - radius * 0.7f, cy - radius * 0.7f, radius * 0.4f,
+                radius * 0.2f);
+
+  // Internal components
+  g.setColour(juce::Colour(0xFF888888));
 
   // Plate (top)
-  g.drawLine(cx - 8, cy - 6, cx + 8, cy - 6, 2.0f);
-  g.drawLine(cx, cy - radius - 5, cx, cy - 6, 2.0f);
+  g.drawLine(cx - 10, cy - 8, cx + 10, cy - 8, 2.0f);
+  g.drawLine(cx, cy - radius - 5, cx, cy - 8, 1.5f);
 
   // Grid (middle)
-  for (int i = -6; i <= 6; i += 4) {
+  for (int i = -8; i <= 8; i += 4) {
     g.drawLine(static_cast<float>(cx + i - 1), cy,
-               static_cast<float>(cx + i + 1), cy, 1.5f);
+               static_cast<float>(cx + i + 1), cy, 1.0f);
   }
-  g.drawLine(cx - radius - 5, cy, cx - 8, cy, 2.0f);
+  g.drawLine(cx - radius - 5, cy, cx - 10, cy, 1.5f);
 
   // Cathode (bottom)
-  g.drawLine(cx - 5, cy + 6, cx + 5, cy + 6, 2.0f);
-  g.drawLine(cx, cy + radius + 5, cx, cy + 6, 2.0f);
+  g.drawLine(cx - 6, cy + 8, cx + 6, cy + 8, 2.0f);
+  g.drawLine(cx, cy + radius + 5, cx, cy + 8, 1.5f);
 }
 
 void ComponentView::drawAudioInput(juce::Graphics &g,

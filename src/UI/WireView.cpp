@@ -13,56 +13,63 @@ void WireView::draw(juce::Graphics &g, juce::Point<float> startScreen,
                     juce::Point<float> endScreen, bool selected) {
   // Wire color based on selection and signal level
   juce::Colour baseColour =
-      selected ? juce::Colour(0xFF00ff88) : juce::Colour(0xFF4a6a8a);
+      selected ? juce::Colour(0xFFffaa00) : juce::Colour(0xFF555555);
 
-  // Brighten based on signal level
   if (signalLevel > 0.0f) {
     float t = std::min(signalLevel, 1.0f);
     baseColour =
-        baseColour.interpolatedWith(juce::Colour(0xFF00ffff), t * 0.5f);
+        baseColour.interpolatedWith(juce::Colour(0xFFffdd00), t * 0.4f);
   }
 
-  g.setColour(baseColour);
-
-  // Calculate wire path with orthogonal routing
+  // Calculate wire path
   juce::Path wirePath;
   wirePath.startNewSubPath(startScreen);
-
-  // Simple orthogonal routing (horizontal then vertical)
   float midX = (startScreen.x + endScreen.x) / 2.0f;
 
-  if (std::abs(startScreen.y - endScreen.y) < 5.0f) {
-    // Nearly horizontal - just draw straight line
-    wirePath.lineTo(endScreen);
-  } else if (std::abs(startScreen.x - endScreen.x) < 5.0f) {
-    // Nearly vertical - just draw straight line
+  if (std::abs(startScreen.y - endScreen.y) < 5.0f ||
+      std::abs(startScreen.x - endScreen.x) < 5.0f) {
     wirePath.lineTo(endScreen);
   } else {
-    // Orthogonal routing
     wirePath.lineTo(midX, startScreen.y);
     wirePath.lineTo(midX, endScreen.y);
     wirePath.lineTo(endScreen);
   }
 
-  float strokeWidth = selected ? 3.0f : 2.0f;
+  float strokeWidth = selected ? 4.0f : 3.0f;
+
+  // 1. Shadow
+  g.setColour(juce::Colours::black.withAlpha(0.3f));
+  g.strokePath(wirePath,
+               juce::PathStrokeType(strokeWidth, juce::PathStrokeType::curved,
+                                    juce::PathStrokeType::rounded),
+               juce::AffineTransform::translation(1.0f, 1.0f));
+
+  // 2. Main cable
+  g.setColour(baseColour);
   g.strokePath(wirePath,
                juce::PathStrokeType(strokeWidth, juce::PathStrokeType::curved,
                                     juce::PathStrokeType::rounded));
 
+  // 3. Highlight (shine)
+  g.setColour(juce::Colours::white.withAlpha(0.2f));
+  g.strokePath(wirePath, juce::PathStrokeType(strokeWidth * 0.4f,
+                                              juce::PathStrokeType::curved,
+                                              juce::PathStrokeType::rounded));
+
   // Draw connection dots at endpoints
-  float dotRadius = selected ? 4.0f : 3.0f;
+  g.setColour(juce::Colour(0xFF888888));
+  float dotRadius = 3.5f;
   g.fillEllipse(startScreen.x - dotRadius, startScreen.y - dotRadius,
                 dotRadius * 2, dotRadius * 2);
   g.fillEllipse(endScreen.x - dotRadius, endScreen.y - dotRadius, dotRadius * 2,
                 dotRadius * 2);
 
-  // If selected, draw glow effect
-  if (selected) {
-    g.setColour(baseColour.withAlpha(0.3f));
-    g.strokePath(wirePath,
-                 juce::PathStrokeType(8.0f, juce::PathStrokeType::curved,
-                                      juce::PathStrokeType::rounded));
-  }
+  // Outer ring for dots
+  g.setColour(juce::Colours::black.withAlpha(0.5f));
+  g.drawEllipse(startScreen.x - dotRadius, startScreen.y - dotRadius,
+                dotRadius * 2, dotRadius * 2, 1.0f);
+  g.drawEllipse(endScreen.x - dotRadius, endScreen.y - dotRadius, dotRadius * 2,
+                dotRadius * 2, 1.0f);
 }
 
 bool WireView::hitTest(juce::Point<float> canvasPos, float zoom) const {

@@ -15,6 +15,9 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
   topBar = std::make_unique<TopBar>(audioProcessor.getCircuitGraph(),
                                     audioProcessor.getCircuitEngine());
 
+  // Apply LookAndFeel
+  setLookAndFeel(&analogLookAndFeel);
+
   // Add components
   addAndMakeVisible(*componentPalette);
   addAndMakeVisible(*circuitDesigner);
@@ -51,18 +54,28 @@ CircuitsAudioProcessorEditor::CircuitsAudioProcessorEditor(
   autoProbe();
 }
 
-CircuitsAudioProcessorEditor::~CircuitsAudioProcessorEditor() { stopTimer(); }
+CircuitsAudioProcessorEditor::~CircuitsAudioProcessorEditor() {
+  setLookAndFeel(nullptr);
+  stopTimer();
+}
 
 void CircuitsAudioProcessorEditor::paint(juce::Graphics &g) {
-  // Dark background gradient
+  // Warm, subtle vintage texture background
   juce::ColourGradient gradient(
-      juce::Colour(0xFF1a1a2e), 0.0f, 0.0f, juce::Colour(0xFF16213e),
+      juce::Colour(0xFF2d2d2d), 0.0f, 0.0f, juce::Colour(0xFF232323),
       static_cast<float>(getWidth()), static_cast<float>(getHeight()), false);
   g.setGradientFill(gradient);
   g.fillAll();
 
+  // Subtle noise/grain effect (simulated with a pattern if possible, but let's
+  // keep it simple for now)
+  g.setColour(juce::Colours::black.withAlpha(0.1f));
+  for (int i = 0; i < getWidth(); i += 2) {
+    g.drawVerticalLine(i, 0.0f, (float)getHeight());
+  }
+
   // Subtle border lines
-  g.setColour(juce::Colour(0xFF2d3a4f));
+  g.setColour(juce::Colour(0xFF3d3d3d));
   g.drawVerticalLine(PALETTE_WIDTH, 0.0f, static_cast<float>(getHeight()));
   g.drawVerticalLine(getWidth() - CONTROL_PANEL_WIDTH, 0.0f,
                      static_cast<float>(getHeight() - OSCILLOSCOPE_HEIGHT));
@@ -96,6 +109,9 @@ void CircuitsAudioProcessorEditor::timerCallback() {
       audioProcessor.getCircuitEngine().isSimulationActive());
 
   // Update oscilloscope with latest voltage history
+  bool isValid = audioProcessor.getCircuitEngine().isSimulationValid();
+  oscilloscopeView->setSimulationValid(isValid);
+
   int nodeCount = audioProcessor.getCircuitGraph().getNodeCount();
   oscilloscopeView->setNodeInfo(audioProcessor.getProbeNodeId(), nodeCount);
 
@@ -123,9 +139,12 @@ void CircuitsAudioProcessorEditor::autoProbe() {
     }
   }
 
-  // If no output, try to find any node with a connection
-  if (graph.getNodeCount() > 0) {
-    audioProcessor.setProbeNode(0); // Probe first node
+  // If no output, try to find any node with a connection that is NOT ground
+  for (int i = 1; i < graph.getNodeCount(); ++i) {
+    audioProcessor.setProbeNode(i);
     oscilloscopeView->setProbeActive(true);
+    return;
   }
+
+  oscilloscopeView->setProbeActive(false);
 }

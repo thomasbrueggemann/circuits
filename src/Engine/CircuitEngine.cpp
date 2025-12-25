@@ -1,5 +1,6 @@
 #include "CircuitEngine.h"
 #include "Components/AudioInput.h"
+#include "Components/AudioOutput.h"
 
 CircuitEngine::CircuitEngine() {}
 
@@ -26,29 +27,39 @@ void CircuitEngine::processSample(float inputSample, float &outputSample) {
     return;
   }
 
-  // Update internal signal generators
-  for (const auto &comp :
-       circuit->getComponentsByType(ComponentType::AudioInput)) {
-    auto *audioIn = static_cast<AudioInput *>(comp);
-    if (audioIn->getSource() == SignalSource::DAV) {
-      audioIn->setVoltage(static_cast<double>(inputSample));
-    } else {
-      audioIn->updateInternalVoltage(sampleRate * oversamplingFactor);
-    }
-  }
-
   double output = 0.0;
+  double internalDt = 1.0 / (sampleRate * oversamplingFactor);
 
   // Oversample for stability
   for (int i = 0; i < oversamplingFactor; ++i) {
-    // Note: AudioInput voltage is already scaled/set above
-    solver.step(0.0); // We pass 0.0 because AudioInput components handle their
-                      // own values
+    // Update internal signal generators for each oversample
+    for (const auto &comp :
+         circuit->getComponentsByType(ComponentType::AudioInput)) {
+      auto *audioIn = static_cast<AudioInput *>(comp);
+      if (audioIn->getSource() == SignalSource::DAW) {
+        audioIn->setVoltage(static_cast<double>(inputSample));
+      } else {
+        audioIn->updateInternalVoltage(sampleRate * oversamplingFactor);
+      }
+    }
+
+    solver.step(0.0);
     output += solver.getOutputVoltage();
   }
 
   // Average the oversampled result (simple decimation)
   output /= oversamplingFactor;
+
+  // Get output gain from AudioOutput component
+  double outputGain = 1.0;
+  for (const auto &comp :
+       circuit->getComponentsByType(ComponentType::AudioOutput)) {
+    if (auto *audioOut = static_cast<AudioOutput *>(comp)) {
+      outputGain = audioOut->getGain();
+      break;
+    }
+  }
+  output *= outputGain;
 
   // DC blocking filter
   double dcBlocked = output - dcBlockerState;

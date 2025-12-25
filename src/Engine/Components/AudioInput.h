@@ -12,7 +12,7 @@
  *
  * The voltage is set by the audio processor for each sample.
  */
-enum class SignalSource { DAV, Sine, Square, Noise };
+enum class SignalSource { DAW, Sine, Square, Noise };
 
 class AudioInput : public CircuitComponent {
 public:
@@ -43,7 +43,7 @@ public:
 
   // Generate next sample for internal generator
   void updateInternalVoltage(double sampleRate) {
-    if (source == SignalSource::DAV)
+    if (source == SignalSource::DAW)
       return;
 
     if (source == SignalSource::Sine) {

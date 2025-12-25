@@ -1,6 +1,7 @@
 #pragma once
 
 #include "PluginProcessor.h"
+#include "UI/AnalogLookAndFeel.h"
 #include "UI/CircuitDesigner.h"
 #include "UI/ComponentPalette.h"
 #include "UI/ControlPanel.h"
@@ -37,6 +38,8 @@ private:
   static constexpr int PALETTE_WIDTH = 80;
   static constexpr int CONTROL_PANEL_WIDTH = 200;
   static constexpr int OSCILLOSCOPE_HEIGHT = 150;
+
+  AnalogLookAndFeel analogLookAndFeel;
 
   JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CircuitsAudioProcessorEditor)
 };

@@ -23,6 +23,7 @@ public:
   // Simulation control
   void setSimulationActive(bool active) { simulationActive = active; }
   bool isSimulationActive() const { return simulationActive; }
+  bool isSimulationValid() const { return !solver.isSimulationFailed(); }
 
   // Oversampling factor for stability
 

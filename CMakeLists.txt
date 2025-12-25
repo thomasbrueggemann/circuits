@@ -9,9 +9,6 @@ set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
 
 if(APPLE)
     set(CMAKE_OSX_DEPLOYMENT_TARGET "10.15" CACHE STRING "Minimum OS X version")
-    set(CMAKE_OSX_SYSROOT "macosx" CACHE STRING "macOS SDK")
-    add_compile_options("-stdlib=libc++")
-    add_link_options("-stdlib=libc++")
 endif()
 
 # Add JUCE
@@ -75,6 +72,10 @@ PRIVATE
     src/Engine/Components
     src/UI
 )
+if(APPLE)
+    # Workaround for missing C++ headers in some Developer Tool versions
+    target_compile_options(Circuits PRIVATE "-isystem" "/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk/usr/include/c++/v1")
+endif()
 
 # Compile definitions
 target_compile_definitions(Circuits

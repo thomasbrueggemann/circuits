@@ -29,6 +29,7 @@ public:
   void setVoltageScale(float vPerDiv) { voltageScale = vPerDiv; }
   void setAutoScale(bool enable) { autoScale = enable; }
   void setSimulationRunning(bool running) { simulationRunning = running; }
+  void setSimulationValid(bool valid) { simulationValid = valid; }
   void setNodeInfo(int probeId, int totalNodes) {
     lastProbeNodeId = probeId;
     lastNodeCount = totalNodes;
@@ -47,6 +48,7 @@ private:
   bool autoScale = true;
   float autoScaleMax = 1.0f;
   bool simulationRunning = false;
+  bool simulationValid = true;
 
   // Diagnostics
   uint32_t logicHeartbeat = 0;

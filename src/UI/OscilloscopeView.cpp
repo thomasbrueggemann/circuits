@@ -16,7 +16,7 @@ void OscilloscopeView::paint(juce::Graphics &g) {
   drawBackground(g, bounds);
   drawGrid(g, bounds);
 
-  if (probeActive) {
+  if (probeActive && simulationValid) {
     drawWaveform(g, bounds);
   } else {
     drawNoSignalMessage(g, bounds);
@@ -65,9 +65,9 @@ void OscilloscopeView::setProbeActive(bool active) {
 
 void OscilloscopeView::drawBackground(juce::Graphics &g,
                                       juce::Rectangle<float> bounds) {
-  // Dark oscilloscope screen
-  juce::ColourGradient gradient(juce::Colour(0xFF0a1520), bounds.getCentreX(),
-                                bounds.getY(), juce::Colour(0xFF051015),
+  // Deep greenish-black CRT screen
+  juce::ColourGradient gradient(juce::Colour(0xFF001100), bounds.getCentreX(),
+                                bounds.getY(), juce::Colour(0xFF000500),
                                 bounds.getCentreX(), bounds.getBottom(), false);
   g.setGradientFill(gradient);
   g.fillRoundedRectangle(bounds, 6.0f);
@@ -97,10 +97,10 @@ void OscilloscopeView::drawGrid(juce::Graphics &g,
   for (int i = 0; i <= GRID_DIVISIONS_X; ++i) {
     float x = gridBounds.getX() + i * xStep;
     if (i == GRID_DIVISIONS_X / 2) {
-      g.setColour(juce::Colour(0xFF2a5a6a).withAlpha(0.7f));
+      g.setColour(juce::Colour(0x66004400));
       g.drawVerticalLine(static_cast<int>(x), gridBounds.getY(),
                          gridBounds.getBottom());
-      g.setColour(juce::Colour(0xFF1a3a4a).withAlpha(0.5f));
+      g.setColour(juce::Colour(0x33004400));
     } else {
       g.drawVerticalLine(static_cast<int>(x), gridBounds.getY(),
                          gridBounds.getBottom());
@@ -113,10 +113,10 @@ void OscilloscopeView::drawGrid(juce::Graphics &g,
     float y = gridBounds.getY() + i * yStep;
     if (i == GRID_DIVISIONS_Y / 2) {
       // Center line (0V reference)
-      g.setColour(juce::Colour(0xFF2a5a6a).withAlpha(0.7f));
+      g.setColour(juce::Colour(0x66004400));
       g.drawHorizontalLine(static_cast<int>(y), gridBounds.getX(),
                            gridBounds.getRight());
-      g.setColour(juce::Colour(0xFF1a3a4a).withAlpha(0.5f));
+      g.setColour(juce::Colour(0x33004400));
     } else {
       g.drawHorizontalLine(static_cast<int>(y), gridBounds.getX(),
                            gridBounds.getRight());
@@ -163,16 +163,16 @@ void OscilloscopeView::drawWaveform(juce::Graphics &g,
   }
 
   // Draw phosphor glow effect
-  for (int i = 3; i >= 0; --i) {
-    float alpha = 0.1f * static_cast<float>(4 - i);
-    float thickness = 1.0f + i * 1.5f;
-    g.setColour(juce::Colour(0xFF00ff88).withAlpha(alpha));
+  for (int i = 4; i >= 0; --i) {
+    float alpha = 0.08f * static_cast<float>(5 - i);
+    float thickness = 1.0f + static_cast<float>(i) * 2.5f;
+    g.setColour(juce::Colour(0xFF00FF41).withAlpha(alpha)); // Phosphor green
     g.strokePath(waveformPath, juce::PathStrokeType(thickness));
   }
 
   // Draw main trace
-  g.setColour(juce::Colour(0xFF00ff88));
-  g.strokePath(waveformPath, juce::PathStrokeType(1.5f));
+  g.setColour(juce::Colour(0xFFBBFFBB)); // Bright core
+  g.strokePath(waveformPath, juce::PathStrokeType(1.0f));
 }
 
 void OscilloscopeView::drawLabels(juce::Graphics &g,
@@ -188,8 +188,14 @@ void OscilloscopeView::drawLabels(juce::Graphics &g,
   if (probeActive) {
     float vScale = autoScale ? autoScaleMax : voltageScale;
     juce::String scaleText = juce::String(vScale, 2) + " V/div";
-    g.drawText(scaleText, bounds.removeFromBottom(12),
-               juce::Justification::centredLeft);
+    if (simulationValid) {
+      g.drawText(scaleText, bounds.removeFromBottom(12),
+                 juce::Justification::centredLeft);
+    } else {
+      g.setColour(juce::Colours::red);
+      g.drawText("ERR: SINGULAR MATRIX", bounds.removeFromBottom(12),
+                 juce::Justification::centredLeft);
+    }
 
     g.drawText(juce::String(timeScale, 1) + " ms/div",
                bounds.removeFromBottom(12).removeFromRight(100),
@@ -240,7 +246,10 @@ void OscilloscopeView::drawNoSignalMessage(juce::Graphics &g,
   g.setFont(12.0f);
 
   juce::String msg = "Click a wire to probe";
-  if (!probeActive)
+  if (!simulationValid)
+    msg = "SIMULATION FAILED\n\nSingular Matrix / Floating Circuit\nCheck "
+          "connections to Ground";
+  else if (!probeActive)
     msg = "No Probe Active\n\nClick a wire or connect AudioOutput\nEnsure "
           "START is pressed";
 

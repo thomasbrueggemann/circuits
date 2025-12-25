@@ -48,6 +48,7 @@ void MNASolver::buildMatrix() {
   }
 
   numNodes = index;
+  outputNodeIndex = -1;
 
   // Count voltage sources
   numVSources = 0;
@@ -135,12 +136,12 @@ void MNASolver::buildMatrix() {
       auto *audioIn = static_cast<AudioInput *>(comp.get());
       stampVoltageSourceStatic(n1, n2, vsourceIndex, 0.0);
       cachedAudioInputs.push_back({audioIn, vsourceIndex});
-      inputNodeIndex = vsourceIndex;
       vsourceIndex++;
       break;
     }
     case ComponentType::AudioOutput: {
-      outputNodeIndex = n1 >= 0 ? n1 : n2;
+      if (outputNodeIndex < 0)
+        outputNodeIndex = n1 >= 0 ? n1 : n2;
       break;
     }
     case ComponentType::VacuumTube: {
@@ -165,6 +166,13 @@ void MNASolver::buildMatrix() {
     int n1 = nodeToIndex[wire.nodeA];
     int n2 = nodeToIndex[wire.nodeB];
     stampResistorStatic(n1, n2, WIRE_RESISTANCE);
+  }
+
+  // Add small shunt conductance to ground for all nodes to prevent singular
+  // matrices
+  constexpr double SHUNT_CONDUCTANCE = 1e-12;
+  for (int i = 0; i < numNodes; ++i) {
+    G_static[i][i] += SHUNT_CONDUCTANCE;
   }
 
   // Initial copy to active matrices
@@ -251,6 +259,8 @@ bool MNASolver::solve() {
   if (matrixSize == 0 || !circuitGraph)
     return false;
 
+  simulationFailed = false;
+
   const juce::ScopedLock sl(circuitGraph->getLock());
 
   // Check for nonlinear components
@@ -274,6 +284,8 @@ bool MNASolver::solve() {
 }
 
 bool MNASolver::solveNonlinear(int maxIterations, double tolerance) {
+  simulationFailed = false;
+
   // Newton-Raphson iteration
   for (int iter = 0; iter < maxIterations; ++iter) {
     // Rebuild matrix from static base + nonlinear stubs
@@ -365,8 +377,11 @@ bool MNASolver::luDecompose() {
       }
     }
 
-    if (maxVal < 1e-12)
+    if (std::abs(LU[k][k]) < 1e-12) {
+      simulationFailed = true;
+      std::fill(x.begin(), x.end(), 0.0);
       return false; // Singular matrix
+    }
 
     // Swap rows
     if (maxRow != k) {
@@ -440,15 +455,9 @@ void MNASolver::step(double inputVoltage) {
     capCurrents[cap.stateIndex] = geq * vCap - ieq;
   }
 
-  // Set input voltage (overwrite in z)
-  if (inputNodeIndex >= 0 && inputNodeIndex < matrixSize) {
-    z[inputNodeIndex] = inputVoltage;
-  }
-
-  // Update all audio inputs with their actual component voltages
   for (const auto &input : cachedAudioInputs) {
     if (input.branchIndex >= 0 && input.branchIndex < matrixSize) {
-      z[input.branchIndex] = input.component->getVoltage();
+      z[input.branchIndex] = input.component->getScaledVoltage();
     }
   }
 
